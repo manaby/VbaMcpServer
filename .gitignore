@@ -1,0 +1,77 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.cache
+*.vspscc
+*.vssscc
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Build outputs
+publish/
+*.exe
+*.dll
+*.pdb
+*.xml
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+coverage*/
+*.coverage
+*.coveragexml
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Office temp files
+~$*.xls*
+~$*.doc*
+~$*.ppt*
+*.tmp
+
+# Installer output
+installer/Output/
+
+# User-specific files
+*.rsuser
+*.log
