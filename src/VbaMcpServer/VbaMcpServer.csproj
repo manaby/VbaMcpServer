@@ -35,22 +35,33 @@
 
   <ItemGroup>
     <!-- Office Interop via NuGet packages (compatible with .NET 8+) -->
+    <!-- Note: Not embedding types to ensure DLLs are copied to output -->
     <PackageReference Include="Microsoft.Office.Interop.Excel" Version="15.0.4795.1001">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <PrivateAssets>none</PrivateAssets>
+      <IncludeAssets>compile; runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 
+  <!-- Determine VBE Interop path based on installed Office version -->
+  <PropertyGroup>
+    <!-- Check for Office 16 (2016/2019/365) -->
+    <VbeInteropPath Condition="Exists('$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office16\Microsoft.Vbe.Interop.dll')">$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office16\Microsoft.Vbe.Interop.dll</VbeInteropPath>
+    <!-- Fallback to Office 15 (2013) -->
+    <VbeInteropPath Condition="'$(VbeInteropPath)' == '' AND Exists('$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\Microsoft.Vbe.Interop.dll')">$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\Microsoft.Vbe.Interop.dll</VbeInteropPath>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Reference to VBE Interop DLL from GAC or Office installation -->
-    <!-- This is a fallback approach for .NET 8 when COMReference doesn't work -->
+    <!-- Supports Office 2013 (v15), 2016/2019/365 (v16) -->
     <!-- The DLL will be resolved from: -->
-    <!-- 1. GAC (Global Assembly Cache) -->
-    <!-- 2. C:\Windows\assembly\GAC_MSIL\Microsoft.Vbe.Interop\ -->
-    <!-- 3. Office installation directory -->
+    <!-- 1. GAC (Global Assembly Cache) - MSBuild tries this first automatically -->
+    <!-- 2. Detected Office PIA path (Office16 preferred, then Office15) -->
+    <!-- 3. Windows assembly cache as final fallback -->
     <Reference Include="Microsoft.Vbe.Interop">
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-      <HintPath>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\Microsoft.Vbe.Interop.dll</HintPath>
-      <Private>false</Private>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <HintPath Condition="'$(VbeInteropPath)' != ''">$(VbeInteropPath)</HintPath>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 

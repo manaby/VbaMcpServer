@@ -1,0 +1,359 @@
+# VBA MCP Server 要件定義書
+
+## 1. プロジェクト概要
+
+### 1.1 目的
+Excel/Access の VBA コードを MCP (Model Context Protocol) 経由で読み書き可能にし、Claude Desktop や Cursor などの AI コーディング環境から VBA の Vibe コーディングを実現する。
+
+### 1.2 背景・課題
+- VBA は Office 内蔵 IDE（Visual Basic Editor）からしか編集できない
+- AI を利用したコーディングには既存コードのコピペが必要
+- 全体の文脈を AI に理解させることが困難
+- 他のプログラミング言語と比較して AI 支援の恩恵を受けにくい
+
+### 1.3 解決策
+MCP サーバーを介して Excel/Access の VBA プロジェクトに直接アクセスし、AI が VBA コードを読み書きできるようにする。
+
+---
+
+## 2. システム要件
+
+### 2.1 実行環境
+
+| 項目 | 要件 |
+|------|------|
+| OS | Windows 10/11 (64-bit) |
+| .NET | .NET 8.0 Runtime |
+| Office | Microsoft Office 2016 以降（Excel/Access） |
+| メモリ | 4GB 以上推奨 |
+
+### 2.2 開発環境
+
+| 項目 | バージョン |
+|------|------------|
+| IDE | Visual Studio 2022 Community 以降 |
+| SDK | .NET 8.0 SDK |
+| 言語 | C# 12 |
+
+### 2.3 依存パッケージ
+
+| パッケージ | バージョン | 用途 |
+|-----------|------------|------|
+| ModelContextProtocol | 0.5.0-preview.1 | MCP SDK |
+| Microsoft.Extensions.Hosting | 8.0.0 | ホスティング基盤 |
+| Microsoft.Extensions.Logging | 8.0.0 | ログ出力 |
+| Microsoft.Extensions.Logging.Console | 8.0.0 | コンソールログ |
+
+---
+
+## 3. 機能要件
+
+### 3.1 Excel VBA 操作機能
+
+#### 3.1.1 ワークブック管理
+| 機能 | 説明 | 優先度 |
+|------|------|--------|
+| ワークブック一覧取得 | 開いている Excel ワークブックの一覧を取得 | 必須 |
+
+#### 3.1.2 モジュール管理
+| 機能 | 説明 | 優先度 |
+|------|------|--------|
+| モジュール一覧取得 | VBA プロジェクト内のモジュール一覧を取得 | 必須 |
+| モジュール読み取り | モジュールの VBA コード全体を取得 | 必須 |
+| モジュール書き込み | モジュールの VBA コードを置換 | 必須 |
+| モジュール作成 | 新規モジュールを作成 | 必須 |
+| モジュール削除 | 既存モジュールを削除 | 必須 |
+| モジュールエクスポート | モジュールをファイルに出力 | 任意 |
+
+#### 3.1.3 対応モジュールタイプ
+| タイプ | 読み取り | 書き込み | 作成 | 削除 | 備考 |
+|--------|:--------:|:--------:|:----:|:----:|------|
+| 標準モジュール (.bas) | ✅ | ✅ | ✅ | ✅ | 完全対応 |
+| クラスモジュール (.cls) | ✅ | ✅ | ✅ | ✅ | 完全対応 |
+| ユーザーフォーム (.frm) | ✅ | ✅ | ✅ | ✅ | コードのみ、デザイン不可 |
+| ドキュメントモジュール | ✅ | ✅ | ❌ | ❌ | ThisWorkbook, Sheet 等 |
+
+### 3.2 Access VBA 操作機能（将来実装）
+
+| 機能 | 説明 | 優先度 |
+|------|------|--------|
+| データベース一覧取得 | 開いている Access データベースの一覧を取得 | 将来 |
+| モジュール操作 | Excel と同等の機能 | 将来 |
+| フォーム/レポートのコードビハインド | フォーム・レポートの VBA コード操作 | 将来 |
+
+### 3.3 安全機能
+
+#### 3.3.1 自動バックアップ
+| 項目 | 仕様 |
+|------|------|
+| バックアップタイミング | モジュール書き込み・削除の前 |
+| 保存先 | `%USERPROFILE%\.vba-mcp-server\backups\` |
+| ファイル名形式 | `{元ファイル名}_{モジュール名}_{timestamp}.bas` |
+| 保持期間 | 30日（設定可能） |
+
+#### 3.3.2 バックアップ管理
+| 機能 | 説明 |
+|------|------|
+| バックアップ一覧 | 作成されたバックアップの一覧表示 |
+| フィルタリング | ソースファイル別にフィルタリング可能 |
+
+---
+
+## 4. MCP ツール定義
+
+### 4.1 ツール一覧
+
+| ツール名 | 説明 |
+|----------|------|
+| `ListOpenExcelFiles` | 開いている Excel ワークブック一覧を取得 |
+| `ListVbaModules` | 指定ワークブックの VBA モジュール一覧を取得 |
+| `ReadVbaModule` | モジュールの VBA コードを読み取り |
+| `WriteVbaModule` | モジュールに VBA コードを書き込み |
+| `CreateVbaModule` | 新規 VBA モジュールを作成 |
+| `DeleteVbaModule` | VBA モジュールを削除 |
+| `ExportVbaModule` | モジュールをファイルにエクスポート |
+| `ListVbaBackups` | バックアップ一覧を取得 |
+
+### 4.2 ツール詳細
+
+#### ListOpenExcelFiles
+```
+入力: なし
+出力: {
+  count: number,
+  workbooks: string[]  // ファイルパスの配列
+}
+```
+
+#### ListVbaModules
+```
+入力: {
+  filePath: string  // ワークブックのフルパス
+}
+出力: {
+  file: string,
+  moduleCount: number,
+  modules: [{
+    name: string,
+    type: string,
+    lineCount: number,
+    procedureCount: number
+  }]
+}
+```
+
+#### ReadVbaModule
+```
+入力: {
+  filePath: string,
+  moduleName: string
+}
+出力: {
+  file: string,
+  module: string,
+  lineCount: number,
+  code: string
+}
+```
+
+#### WriteVbaModule
+```
+入力: {
+  filePath: string,
+  moduleName: string,
+  code: string
+}
+出力: {
+  success: boolean,
+  file: string,
+  module: string,
+  linesWritten: number,
+  backupCreated: boolean,
+  backupPath: string | null
+}
+```
+
+#### CreateVbaModule
+```
+入力: {
+  filePath: string,
+  moduleName: string,
+  moduleType: "standard" | "class" | "userform"  // default: "standard"
+}
+出力: {
+  success: boolean,
+  file: string,
+  module: string,
+  type: string
+}
+```
+
+#### DeleteVbaModule
+```
+入力: {
+  filePath: string,
+  moduleName: string
+}
+出力: {
+  success: boolean,
+  file: string,
+  module: string,
+  deleted: boolean,
+  backupPath: string
+}
+```
+
+#### ExportVbaModule
+```
+入力: {
+  filePath: string,
+  moduleName: string,
+  outputPath: string
+}
+出力: {
+  success: boolean,
+  file: string,
+  module: string,
+  exportedTo: string
+}
+```
+
+#### ListVbaBackups
+```
+入力: {
+  filePath?: string  // オプション: フィルタリング用
+}
+出力: {
+  count: number,
+  backups: [{
+    fileName: string,
+    createdAt: string,
+    sizeBytes: number,
+    fullPath: string
+  }]
+}
+```
+
+---
+
+## 5. 非機能要件
+
+### 5.1 セキュリティ
+
+| 要件 | 説明 |
+|------|------|
+| VBA プロジェクトアクセス | Office の「VBA プロジェクト オブジェクト モデルへのアクセスを信頼する」設定が必須 |
+| ローカル実行 | サーバーはローカルマシンでのみ実行（リモートアクセス不可） |
+| 自動バックアップ | 破壊的操作の前に必ずバックアップを作成 |
+
+### 5.2 パフォーマンス
+
+| 要件 | 目標値 |
+|------|--------|
+| モジュール読み取り | 1秒以内 |
+| モジュール書き込み | 2秒以内（バックアップ含む） |
+| ワークブック一覧取得 | 500ms 以内 |
+
+### 5.3 配布形式
+
+| 形式 | 説明 |
+|------|------|
+| Self-contained exe | .NET ランタイム同梱の単一実行ファイル |
+| サイズ | 約 60-80MB |
+| 対応アーキテクチャ | win-x64 |
+
+---
+
+## 6. 制約事項
+
+### 6.1 技術的制約
+1. **Windows 専用**: COM 依存のため Windows でのみ動作
+2. **Office 起動必須**: 対象ファイルが Office アプリケーションで開いている必要あり
+3. **パスワード保護非対応**: パスワード保護された VBA プロジェクトにはアクセス不可
+4. **フォームデザイン不可**: ユーザーフォームのコントロール配置は編集不可（コードのみ）
+
+### 6.2 MCP SDK 制約
+- SDK はプレビュー版（0.5.0-preview.1）のため、API が変更される可能性あり
+
+---
+
+## 7. 前提条件
+
+### 7.1 ユーザー側の設定（必須）
+
+Excel/Access で以下の設定を有効にする必要があります：
+
+```
+ファイル → オプション → トラストセンター → トラストセンターの設定
+→ マクロの設定 → ☑ VBA プロジェクト オブジェクト モデルへのアクセスを信頼する
+```
+
+### 7.2 対応ファイル形式
+
+| アプリケーション | 対応形式 |
+|------------------|----------|
+| Excel | .xlsm, .xlsb, .xls, .xltm |
+| Access | .accdb, .mdb（将来対応） |
+
+---
+
+## 8. MCP クライアント連携
+
+### 8.1 Claude Desktop 設定例
+
+`claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\path\\to\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+### 8.2 対応 MCP クライアント
+- Claude Desktop
+- Cursor
+- その他 MCP 対応エディタ/ツール
+
+---
+
+## 9. 開発ロードマップ
+
+### Phase 1: Excel 基本機能（現在）
+- [x] Excel COM 接続
+- [x] モジュール読み書き
+- [x] 自動バックアップ
+- [x] MCP サーバー実装
+
+### Phase 2: 安定化・テスト
+- [ ] 単体テスト追加
+- [ ] エラーハンドリング強化
+- [ ] ログ機能強化
+
+### Phase 3: Access 対応
+- [ ] Access COM 接続
+- [ ] フォーム/レポートのコードビハインド対応
+
+### Phase 4: 拡張機能
+- [ ] 部分的なコード編集（行単位）
+- [ ] プロシージャ単位の操作
+- [ ] 参照設定の管理
+- [ ] VBA プロジェクトのインポート
+
+---
+
+## 10. ライセンス
+
+- **プロジェクト**: MIT License
+- **.NET Runtime**: MIT License
+- **MCP SDK**: MIT License
+
+---
+
+## 改訂履歴
+
+| バージョン | 日付 | 変更内容 |
+|------------|------|----------|
+| 0.1.0 | 2024-12-26 | 初版作成 |
