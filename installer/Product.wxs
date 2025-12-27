@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="VBA MCP Server"
+           Version="0.1.0"
+           Manufacturer="vba-mcp-server contributors"
+           UpgradeCode="A5B4C3D2-E1F0-4A5B-9C8D-7E6F5A4B3C2D">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of VBA MCP Server is already installed." />
+
+    <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+
+    <!-- Installation Directory Structure -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="VBA MCP Server">
+        <Component Id="VbaMcpServerExe" Guid="B6C5D4E3-F2A1-4B6C-8D9E-7F8A6B5C4D3E">
+          <File Id="VbaMcpServerExe"
+                Source="../src/VbaMcpServer/bin/Release/net8.0-windows/win-x64/publish/VbaMcpServer.exe"
+                KeyPath="yes" />
+        </Component>
+
+        <Component Id="VbaMcpServerGUI" Guid="C7D6E5F4-A3B2-4C7D-9E8F-7A8B6C5D4E3F">
+          <File Id="VbaMcpServerGUIExe"
+                Source="../src/VbaMcpServer.GUI/bin/Release/net8.0-windows/win-x64/publish/VbaMcpServer.GUI.exe"
+                KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start Menu Shortcut -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="VBA MCP Server">
+        <Component Id="ApplicationShortcut" Guid="D8E7F6A5-B4C3-4D8E-8F9A-8B7C6D5E4F3A">
+          <Shortcut Id="StartMenuShortcut"
+                    Name="VBA MCP Server Manager"
+                    Target="[INSTALLFOLDER]VbaMcpServer.GUI.exe"
+                    WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU"
+                        Key="Software\VbaMcpServer"
+                        Name="installed"
+                        Type="integer"
+                        Value="1"
+                        KeyPath="yes"/>
+        </Component>
+
+        <!-- Registry entry for installation path -->
+        <Component Id="RegistryEntries" Guid="E9F8A7B6-C5D4-4E9F-9A8B-9C7D6E5F4A3B">
+          <RegistryKey Root="HKCU" Key="Software\VbaMcpServer">
+            <RegistryValue Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" />
+            <RegistryValue Name="ServerExePath" Type="string" Value="[INSTALLFOLDER]VbaMcpServer.exe" />
+          </RegistryKey>
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Features -->
+    <Feature Id="ProductFeature" Title="VBA MCP Server" Level="1">
+      <ComponentRef Id="VbaMcpServerExe" />
+      <ComponentRef Id="VbaMcpServerGUI" />
+      <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="RegistryEntries" />
+    </Feature>
+  </Package>
+</Wix>

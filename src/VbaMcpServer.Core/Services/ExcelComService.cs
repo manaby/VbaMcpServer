@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using VbaMcpServer.Exceptions;
 using VbaMcpServer.Helpers;
 using VbaMcpServer.Models;
 using Excel = Microsoft.Office.Interop.Excel;
@@ -45,7 +46,7 @@ public class ExcelComService
             // Use ComHelper for .NET 8+ compatibility (Marshal.GetActiveObject is not supported)
             return (Excel.Application)ComHelper.GetActiveObject("Excel.Application");
         }
-        catch (COMException ex) when (ex.HResult == unchecked((int)0x800401E3))
+        catch (COMException ex) when (ComErrorCodes.IsApplicationUnavailable(ex.HResult))
         {
             // MK_E_UNAVAILABLE - Excel is not running
             _logger.LogDebug("Excel is not running");
@@ -62,7 +63,7 @@ public class ExcelComService
         if (excel == null) return null;
 
         var normalizedPath = Path.GetFullPath(filePath);
-        
+
         foreach (Excel.Workbook wb in excel.Workbooks)
         {
             if (string.Equals(wb.FullName, normalizedPath, StringComparison.OrdinalIgnoreCase))
@@ -82,7 +83,7 @@ public class ExcelComService
     {
         var result = new List<string>();
         var excel = GetExcelApplication();
-        
+
         if (excel == null) return result;
 
         foreach (Excel.Workbook wb in excel.Workbooks)
@@ -100,7 +101,7 @@ public class ExcelComService
     {
         var result = new List<ModuleInfo>();
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -109,7 +110,7 @@ public class ExcelComService
         try
         {
             var vbProject = workbook.VBProject;
-            
+
             foreach (VBIDE.VBComponent component in vbProject.VBComponents)
             {
                 var moduleInfo = new ModuleInfo
@@ -124,9 +125,7 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
 
         return result;
@@ -138,7 +137,7 @@ public class ExcelComService
     public string ReadModule(string filePath, string moduleName)
     {
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -159,13 +158,11 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
-        catch (COMException ex) when (ex.Message.Contains("Subscript out of range"))
+        catch (COMException ex) when (ComErrorCodes.IsNotFoundError(ex.HResult) || ex.Message.Contains("Subscript out of range"))
         {
-            throw new ArgumentException($"Module not found: {moduleName}", ex);
+            throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
     }
 
@@ -175,7 +172,7 @@ public class ExcelComService
     public void WriteModule(string filePath, string moduleName, string code)
     {
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -203,13 +200,11 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
-        catch (COMException ex) when (ex.Message.Contains("Subscript out of range"))
+        catch (COMException ex) when (ComErrorCodes.IsNotFoundError(ex.HResult) || ex.Message.Contains("Subscript out of range"))
         {
-            throw new ArgumentException($"Module not found: {moduleName}", ex);
+            throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
     }
 
@@ -219,7 +214,7 @@ public class ExcelComService
     public void CreateModule(string filePath, string moduleName, VbaModuleType moduleType)
     {
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -236,9 +231,7 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
     }
 
@@ -248,7 +241,7 @@ public class ExcelComService
     public void DeleteModule(string filePath, string moduleName)
     {
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -258,7 +251,7 @@ public class ExcelComService
         {
             var vbProject = workbook.VBProject;
             var component = vbProject.VBComponents.Item(moduleName);
-            
+
             // Cannot delete document modules
             if (component.Type == VBIDE.vbext_ComponentType.vbext_ct_Document)
             {
@@ -271,13 +264,11 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
-        catch (COMException ex) when (ex.Message.Contains("Subscript out of range"))
+        catch (COMException ex) when (ComErrorCodes.IsNotFoundError(ex.HResult) || ex.Message.Contains("Subscript out of range"))
         {
-            throw new ArgumentException($"Module not found: {moduleName}", ex);
+            throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
     }
 
@@ -287,7 +278,7 @@ public class ExcelComService
     public void ExportModule(string filePath, string moduleName, string outputPath)
     {
         var workbook = GetWorkbook(filePath);
-        
+
         if (workbook == null)
         {
             throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
@@ -303,13 +294,11 @@ public class ExcelComService
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
-            throw new UnauthorizedAccessException(
-                "VBA project access is not trusted. Please enable 'Trust access to the VBA project object model' in Excel Trust Center settings.",
-                ex);
+            throw VbaAccessException.CreateTrustCenterError(filePath);
         }
-        catch (COMException ex) when (ex.Message.Contains("Subscript out of range"))
+        catch (COMException ex) when (ComErrorCodes.IsNotFoundError(ex.HResult) || ex.Message.Contains("Subscript out of range"))
         {
-            throw new ArgumentException($"Module not found: {moduleName}", ex);
+            throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
     }
 

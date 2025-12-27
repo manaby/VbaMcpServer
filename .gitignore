@@ -57,6 +57,7 @@ coverage*/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+nul
 
 # Backup files
 *.bak
@@ -75,3 +76,4 @@ installer/Output/
 # User-specific files
 *.rsuser
 *.log
+.claude/settings.local.json

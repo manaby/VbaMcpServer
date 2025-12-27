@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWindowsForms>false</UseWindowsForms>
-    
+
     <!-- Assembly Info -->
     <AssemblyName>VbaMcpServer</AssemblyName>
     <RootNamespace>VbaMcpServer</RootNamespace>
@@ -15,8 +15,10 @@
     <Description>MCP server for reading and writing VBA code in Excel and Access</Description>
     <RepositoryUrl>https://github.com/YOUR_USERNAME/vba-mcp-server</RepositoryUrl>
     <License>MIT</License>
-    
-    <!-- Publishing -->
+  </PropertyGroup>
+
+  <!-- Publishing settings - only applied during dotnet publish -->
+  <PropertyGroup Condition="'$(PublishProtocol)' != ''">
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -24,13 +26,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- MCP SDK -->
+    <!-- MCP SDK - requires Microsoft.Extensions 10.0.0 -->
     <PackageReference Include="ModelContextProtocol" Version="0.5.0-preview.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-    
-    <!-- Logging -->
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+
+    <!-- Microsoft.Extensions packages - all must be 10.0.0 to match MCP SDK requirements -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+
+    <!-- Logging - Serilog (compatible with Microsoft.Extensions 10.0.0) -->
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="2.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -63,6 +74,16 @@
       <HintPath Condition="'$(VbeInteropPath)' != ''">$(VbeInteropPath)</HintPath>
       <Private>true</Private>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VbaMcpServer.Core\VbaMcpServer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Assembly Info -->
+    <AssemblyName>VbaMcpServer.Core</AssemblyName>
+    <RootNamespace>VbaMcpServer</RootNamespace>
+    <Version>0.1.0</Version>
+    <Authors>vba-mcp-server contributors</Authors>
+    <Description>Core business logic for VBA MCP Server</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Logging - must match VbaMcpServer project (10.0.0) -->
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Office Interop via NuGet packages (compatible with .NET 8+) -->
+    <PackageReference Include="Microsoft.Office.Interop.Excel" Version="15.0.4795.1001">
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <PrivateAssets>none</PrivateAssets>
+      <IncludeAssets>compile; runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- Determine VBE Interop path based on installed Office version -->
+  <PropertyGroup>
+    <!-- Check for Office 16 (2016/2019/365) -->
+    <VbeInteropPath Condition="Exists('$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office16\Microsoft.Vbe.Interop.dll')">$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office16\Microsoft.Vbe.Interop.dll</VbeInteropPath>
+    <!-- Fallback to Office 15 (2013) -->
+    <VbeInteropPath Condition="'$(VbeInteropPath)' == '' AND Exists('$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\Microsoft.Vbe.Interop.dll')">$(MSBuildProgramFiles32)\Microsoft Visual Studio\Shared\Visual Studio Tools for Office\PIA\Office15\Microsoft.Vbe.Interop.dll</VbeInteropPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference to VBE Interop DLL from GAC or Office installation -->
+    <Reference Include="Microsoft.Vbe.Interop">
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <HintPath Condition="'$(VbeInteropPath)' != ''">$(VbeInteropPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

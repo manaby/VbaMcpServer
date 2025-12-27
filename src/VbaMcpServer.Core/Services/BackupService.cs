@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using VbaMcpServer.Exceptions;
 
 namespace VbaMcpServer.Services;
 
@@ -44,7 +45,7 @@ public class BackupService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create backup for {Module}", moduleName);
-            throw;
+            throw new BackupFailedException($"Failed to create backup for module '{moduleName}'", ex, filePath, moduleName);
         }
     }
 
@@ -54,13 +55,13 @@ public class BackupService
     public List<BackupInfo> ListBackups(string? filePath = null)
     {
         var result = new List<BackupInfo>();
-        
+
         if (!Directory.Exists(_backupDirectory))
         {
             return result;
         }
 
-        var searchPattern = filePath != null 
+        var searchPattern = filePath != null
             ? $"{SanitizeFileName(Path.GetFileNameWithoutExtension(filePath))}_*.bas"
             : "*.bas";
 

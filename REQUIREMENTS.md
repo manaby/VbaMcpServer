@@ -42,7 +42,11 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | ModelContextProtocol | 0.5.0-preview.1 | MCP SDK |
 | Microsoft.Extensions.Hosting | 8.0.0 | ホスティング基盤 |
 | Microsoft.Extensions.Logging | 8.0.0 | ログ出力 |
+| Microsoft.Extensions.Logging.Abstractions | 10.0.0 | ログ抽象化 |
 | Microsoft.Extensions.Logging.Console | 8.0.0 | コンソールログ |
+| Serilog.Extensions.Hosting | 8.0.0 | Serilogホスティング |
+| Serilog.Sinks.Console | 5.0.0 | Serilogコンソール出力 |
+| Serilog.Sinks.File | 5.0.0 | Serilogファイル出力 |
 
 ---
 
@@ -258,9 +262,11 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 
 | 形式 | 説明 |
 |------|------|
-| Self-contained exe | .NET ランタイム同梱の単一実行ファイル |
-| サイズ | 約 60-80MB |
+| MSI インストーラ（推奨） | WiX Toolset で作成、GUI管理アプリ含む |
+| Self-contained exe | .NET ランタイム同梱の単一実行ファイル（CLI版） |
+| サイズ | MSI: 約 80-100MB、CLI exe: 約 60-80MB |
 | 対応アーキテクチャ | win-x64 |
+| GUI管理ツール | VBA MCP Server Manager（WinForms） |
 
 ---
 
@@ -327,18 +333,21 @@ Excel/Access で以下の設定を有効にする必要があります：
 - [x] 自動バックアップ
 - [x] MCP サーバー実装
 
-### Phase 2: 安定化・テスト
-- [ ] 単体テスト追加
-- [ ] エラーハンドリング強化
-- [ ] ログ機能強化
+### Phase 2: 安定化・テスト ✅ 完了
+- [x] 単体テスト追加 (26テスト実装)
+- [x] エラーハンドリング強化 (カスタム例外クラス5種)
+- [x] ログ機能強化 (Serilog導入、サーバー/VBA編集ログ分離)
+- [x] プロジェクト構造再編成 (Core/CLI/GUI/Tests分離)
+- [x] GUI管理アプリケーション (WinForms)
+- [x] MSIインストーラ (WiX Toolset)
 
 ### Phase 3: Access 対応
 - [ ] Access COM 接続
 - [ ] フォーム/レポートのコードビハインド対応
 
 ### Phase 4: 拡張機能
+- [x] プロシージャ単位の操作
 - [ ] 部分的なコード編集（行単位）
-- [ ] プロシージャ単位の操作
 - [ ] 参照設定の管理
 - [ ] VBA プロジェクトのインポート
 
@@ -357,3 +366,4 @@ Excel/Access で以下の設定を有効にする必要があります：
 | バージョン | 日付 | 変更内容 |
 |------------|------|----------|
 | 0.1.0 | 2024-12-26 | 初版作成 |
+| 0.2.0 | 2025-12-26 | Phase 2完了: GUI管理アプリ追加、単体テスト追加、ログ強化、MSIインストーラ対応 |

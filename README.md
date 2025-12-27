@@ -40,19 +40,60 @@ An MCP (Model Context Protocol) server that enables AI coding assistants like Cl
 
 ### Installation
 
-Download the latest release from [Releases](../../releases) page.
+#### Option 1: Using Installer (Recommended)
 
-Or build from source:
+1. Download `VbaMcpServer.msi` from [Releases](../../releases) page
+2. Run the installer and follow the wizard
+3. Launch "VBA MCP Server Manager" from Start Menu
+
+#### Option 2: Build from Source
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/vba-mcp-server.git
-cd vba-mcp-server/src/VbaMcpServer
-dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+cd vba-mcp-server
+
+# Build all projects (outputs to unified bin/Release/ directory)
+dotnet build -c Release
+
+# Or build self-contained single executables
+dotnet publish src/VbaMcpServer -c Release -r win-x64 --self-contained /p:PublishSingleFile=true
+dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:PublishSingleFile=true
 ```
+
+**Output locations:**
+- Normal build: `bin/Release/` (all executables in one directory)
+- Publish build: `src/{ProjectName}/bin/Release/win-x64/publish/`
 
 ### Configuration
 
+#### Using GUI Manager
+
+1. Launch "VBA MCP Server Manager" from Start Menu
+2. The GUI automatically detects VbaMcpServer.exe using:
+   - Registry entry (set by installer)
+   - Same directory location
+   - Development build detection
+3. (Optional) Override path in `appsettings.json` if needed
+4. Click "Start" to run the MCP server
+5. Monitor logs in real-time
+
+For detailed configuration options, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+#### Manual Configuration (CLI)
+
 Add to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+Or if you built from source:
 
 ```json
 {
@@ -174,19 +215,60 @@ Excel や Access の VBA コードを、Claude Desktop や Cursor などの AI �
 
 ### インストール
 
-[Releases](../../releases) ページから最新版をダウンロードしてください。
+#### 方法1: インストーラを使用（推奨）
 
-またはソースからビルド：
+1. [Releases](../../releases) ページから `VbaMcpServer.msi` をダウンロード
+2. インストーラを実行してウィザードに従う
+3. スタートメニューから「VBA MCP Server Manager」を起動
+
+#### 方法2: ソースからビルド
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/vba-mcp-server.git
-cd vba-mcp-server/src/VbaMcpServer
-dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+cd vba-mcp-server
+
+# 全プロジェクトをビルド（統一された bin/Release/ ディレクトリに出力）
+dotnet build -c Release
+
+# または、自己完結型の単一実行ファイルをビルド
+dotnet publish src/VbaMcpServer -c Release -r win-x64 --self-contained /p:PublishSingleFile=true
+dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:PublishSingleFile=true
 ```
+
+**出力先:**
+- 通常ビルド: `bin/Release/` (すべての実行ファイルが同じディレクトリ)
+- Publishビルド: `src/{ProjectName}/bin/Release/win-x64/publish/`
 
 ### 設定
 
+#### GUI マネージャーを使用
+
+1. スタートメニューから「VBA MCP Server Manager」を起動
+2. GUI は以下の方法で VbaMcpServer.exe を自動検出します:
+   - レジストリエントリ（インストーラーで設定）
+   - 同じディレクトリ内の検索
+   - 開発ビルドの自動検出
+3. （オプション）必要に応じて `appsettings.json` でパスを上書き可能
+4. 「Start」ボタンをクリックして MCP サーバーを実行
+5. リアルタイムでログを監視
+
+詳細な設定オプションは [docs/CONFIGURATION.md](docs/CONFIGURATION.md) を参照してください。
+
+#### 手動設定（CLI）
+
 Claude Desktop の設定ファイル（`%APPDATA%\Claude\claude_desktop_config.json`）に追加：
+
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+またはソースからビルドした場合：
 
 ```json
 {
