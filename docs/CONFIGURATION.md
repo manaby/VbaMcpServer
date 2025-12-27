@@ -110,6 +110,34 @@ For direct MCP integration without GUI, configure Claude Desktop:
 }
 ```
 
+### Claude Code (CLI)
+
+For Claude Code CLI tool integration:
+
+**Windows (%USERPROFILE%\\.claude\\settings.json)**:
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**macOS/Linux (~/.claude/settings.json)**:
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "/path/to/VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**Note**: Claude Code uses `settings.json` instead of `claude_desktop_config.json`.
+
 ## Log Files
 
 Logs are stored in user profile directory:
@@ -232,6 +260,34 @@ GUI を使わずに直接 MCP 統合する場合は、Claude Desktop を設定�
   }
 }
 ```
+
+### Claude Code (CLI)
+
+Claude Code CLI ツールとの統合:
+
+**Windows (%USERPROFILE%\\.claude\\settings.json)**:
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**macOS/Linux (~/.claude/settings.json)**:
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "/path/to/VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**注意**: Claude Code は `claude_desktop_config.json` ではなく `settings.json` を使用します。
 
 ## ログファイル
 

@@ -22,6 +22,8 @@ This document explains how the VBA MCP Server Manager GUI locates the VbaMcpServ
 
 The GUI searches for VbaMcpServer.exe in the following order (first match wins):
 
+**Note**: The search process uses only 3 stages. Development build auto-detection is not implemented.
+
 ### Priority 1: User Configuration (appsettings.json)
 
 **File**: `appsettings.json` (same directory as VbaMcpServer.GUI.exe)
@@ -72,7 +74,7 @@ Set-ItemProperty -Path "HKCU:\Software\VbaMcpServer" -Name "ServerExePath" -Valu
 reg add "HKCU\Software\VbaMcpServer" /v ServerExePath /t REG_SZ /d "C:\Program Files\VBA MCP Server\VbaMcpServer.exe" /f
 ```
 
-### Priority 3: Same Directory
+### Priority 3: Same Directory (Final Fallback)
 
 **Path**: `{GUI_DIRECTORY}\VbaMcpServer.exe`
 
@@ -80,6 +82,7 @@ reg add "HKCU\Software\VbaMcpServer" /v ServerExePath /t REG_SZ /d "C:\Program F
 - Both executables deployed together (e.g., portable installation)
 - Manual xcopy deployment
 - MSI installation (both files in `C:\Program Files\VBA MCP Server\`)
+- Development builds using unified output directory (via Directory.Build.props)
 
 **Example**:
 ```
@@ -89,27 +92,7 @@ C:\MyTools\
 └── appsettings.json
 ```
 
-### Priority 4: Development Build Detection
-
-**Paths checked** (relative to GUI binary location):
-
-```
-GUI Location:
-  src/VbaMcpServer.GUI/bin/{Debug|Release}/net8.0-windows/VbaMcpServer.GUI.exe
-
-Searched Locations:
-  ../../../../VbaMcpServer/bin/Debug/net8.0-windows/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Release/net8.0-windows/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Debug/net8.0-windows/win-x64/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Release/net8.0-windows/win-x64/VbaMcpServer.exe
-```
-
-**When it works**:
-- Standard Visual Studio solution structure
-- Building from source
-- Running/debugging in Visual Studio
-- Both Debug and Release configurations supported
-- Both normal builds and published builds supported
+**Note for developers**: When building from source with the standard solution, both executables are output to the same `bin\{Configuration}\` directory due to Directory.Build.props settings, so this fallback works automatically for development builds.
 
 ## Implementation Details
 
@@ -131,15 +114,8 @@ private string FindMcpServerExecutable()
     if (!string.IsNullOrWhiteSpace(registryPath))
         candidates.Add(registryPath);
 
-    // 3. Same directory
+    // 3. Same directory (fallback)
     candidates.Add(Path.Combine(currentDir, "VbaMcpServer.exe"));
-
-    // 4. Development builds
-    foreach (var config in new[] { "Debug", "Release" })
-    {
-        candidates.Add(Path.Combine(currentDir, "..", "..", "..", "..", "..", "VbaMcpServer", "bin", config, "net8.0-windows", "VbaMcpServer.exe"));
-        candidates.Add(Path.Combine(currentDir, "..", "..", "..", "..", "..", "VbaMcpServer", "bin", config, "net8.0-windows", "win-x64", "VbaMcpServer.exe"));
-    }
 
     // Search and return first match
     foreach (var candidate in candidates)
@@ -148,7 +124,7 @@ private string FindMcpServerExecutable()
             return Path.GetFullPath(candidate);
     }
 
-    return Path.Combine(currentDir, "VbaMcpServer.exe"); // Fallback
+    return Path.Combine(currentDir, "VbaMcpServer.exe"); // Final fallback
 }
 ```
 
@@ -192,24 +168,27 @@ All path resolution attempts are logged to the Server Log tab in the GUI:
 - Update registry value
 - Rebuild the preferred version
 
-### Problem: Development builds not detected
+### Problem: Development builds not found
 
 **Possible causes**:
-1. Non-standard solution structure
-2. Building with custom output directories
-3. Custom MSBuild properties
+1. Building with custom output directories that override Directory.Build.props
+2. Building projects independently instead of the whole solution
+3. Output files in different directories
 
 **Solutions**:
-1. Use appsettings.json to specify path manually:
+1. Build the entire solution (not individual projects) to use unified output:
+   ```bash
+   dotnet build -c Debug
+   ```
+2. Use appsettings.json to specify path manually:
    ```json
    {
      "VbaMcpServer": {
-       "ServerExePath": "C:\\MyProjects\\vba-mcp\\output\\VbaMcpServer.exe"
+       "ServerExePath": "C:\\MyProjects\\vba-mcp\\src\\VbaMcpServer\\bin\\Debug\\VbaMcpServer.exe"
      }
    }
    ```
-2. Adjust solution structure to match expected layout
-3. Copy VbaMcpServer.exe to same directory as GUI
+3. Ensure Directory.Build.props is present at solution root
 
 ## Best Practices
 
@@ -274,6 +253,8 @@ Potential improvements for future versions:
 
 GUI は以下の順序で VbaMcpServer.exe を検索します（最初に一致したものが使用されます）:
 
+**注意**: 検索プロセスは3段階のみです。開発ビルドの自動検出は実装されていません。
+
 ### 優先順位 1: ユーザー設定（appsettings.json）
 
 **ファイル**: `appsettings.json`（VbaMcpServer.GUI.exe と同じディレクトリ）
@@ -324,7 +305,7 @@ Set-ItemProperty -Path "HKCU:\Software\VbaMcpServer" -Name "ServerExePath" -Valu
 reg add "HKCU\Software\VbaMcpServer" /v ServerExePath /t REG_SZ /d "C:\Program Files\VBA MCP Server\VbaMcpServer.exe" /f
 ```
 
-### 優先順位 3: 同じディレクトリ
+### 優先順位 3: 同じディレクトリ（最終フォールバック）
 
 **パス**: `{GUI_DIRECTORY}\VbaMcpServer.exe`
 
@@ -332,6 +313,7 @@ reg add "HKCU\Software\VbaMcpServer" /v ServerExePath /t REG_SZ /d "C:\Program F
 - 両方の実行ファイルが一緒に配置されている場合（ポータブルインストールなど）
 - 手動での xcopy 配置
 - MSI インストール（両方のファイルが `C:\Program Files\VBA MCP Server\` に配置）
+- 統一出力ディレクトリを使用した開発ビルド（Directory.Build.props経由）
 
 **例**:
 ```
@@ -341,27 +323,7 @@ C:\MyTools\
 └── appsettings.json
 ```
 
-### 優先順位 4: 開発ビルド検出
-
-**チェックされるパス**（GUI バイナリの場所からの相対パス）:
-
-```
-GUI の場所:
-  src/VbaMcpServer.GUI/bin/{Debug|Release}/net8.0-windows/VbaMcpServer.GUI.exe
-
-検索される場所:
-  ../../../../VbaMcpServer/bin/Debug/net8.0-windows/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Release/net8.0-windows/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Debug/net8.0-windows/win-x64/VbaMcpServer.exe
-  ../../../../VbaMcpServer/bin/Release/net8.0-windows/win-x64/VbaMcpServer.exe
-```
-
-**動作する場合**:
-- 標準的な Visual Studio ソリューション構造
-- ソースからのビルド
-- Visual Studio での実行/デバッグ
-- Debug と Release 両方の構成に対応
-- 通常ビルドと発行ビルド両方に対応
+**開発者向け注意**: 標準ソリューションでソースからビルドする場合、Directory.Build.propsの設定により両方の実行ファイルが同じ`bin\{Configuration}\`ディレクトリに出力されるため、このフォールバックが開発ビルドでも自動的に機能します。
 
 ## 実装詳細
 
@@ -383,15 +345,8 @@ private string FindMcpServerExecutable()
     if (!string.IsNullOrWhiteSpace(registryPath))
         candidates.Add(registryPath);
 
-    // 3. 同じディレクトリ
+    // 3. 同じディレクトリ（フォールバック）
     candidates.Add(Path.Combine(currentDir, "VbaMcpServer.exe"));
-
-    // 4. 開発ビルド
-    foreach (var config in new[] { "Debug", "Release" })
-    {
-        candidates.Add(Path.Combine(currentDir, "..", "..", "..", "..", "..", "VbaMcpServer", "bin", config, "net8.0-windows", "VbaMcpServer.exe"));
-        candidates.Add(Path.Combine(currentDir, "..", "..", "..", "..", "..", "VbaMcpServer", "bin", config, "net8.0-windows", "win-x64", "VbaMcpServer.exe"));
-    }
 
     // 検索して最初に一致したものを返す
     foreach (var candidate in candidates)
@@ -400,7 +355,7 @@ private string FindMcpServerExecutable()
             return Path.GetFullPath(candidate);
     }
 
-    return Path.Combine(currentDir, "VbaMcpServer.exe"); // フォールバック
+    return Path.Combine(currentDir, "VbaMcpServer.exe"); // 最終フォールバック
 }
 ```
 
@@ -444,24 +399,27 @@ private string FindMcpServerExecutable()
 - レジストリ値を更新
 - 優先するバージョンをリビルド
 
-### 問題: 開発ビルドが検出されない
+### 問題: 開発ビルドが見つからない
 
 **考えられる原因**:
-1. 非標準的なソリューション構造
-2. カスタム出力ディレクトリでのビルド
-3. カスタム MSBuild プロパティ
+1. Directory.Build.propsを上書きするカスタム出力ディレクトリでのビルド
+2. ソリューション全体ではなくプロジェクトを個別にビルド
+3. 出力ファイルが異なるディレクトリにある
 
 **解決策**:
-1. appsettings.json を使用してパスを手動で指定:
+1. ソリューション全体をビルドして統一出力を使用:
+   ```bash
+   dotnet build -c Debug
+   ```
+2. appsettings.json を使用してパスを手動で指定:
    ```json
    {
      "VbaMcpServer": {
-       "ServerExePath": "C:\\MyProjects\\vba-mcp\\output\\VbaMcpServer.exe"
+       "ServerExePath": "C:\\MyProjects\\vba-mcp\\src\\VbaMcpServer\\bin\\Debug\\VbaMcpServer.exe"
      }
    }
    ```
-2. ソリューション構造を期待されるレイアウトに調整
-3. VbaMcpServer.exe を GUI と同じディレクトリにコピー
+3. ソリューションルートにDirectory.Build.propsが存在することを確認
 
 ## ベストプラクティス
 

@@ -182,9 +182,7 @@ Sub DebugPrint(data As Variant)
 End Sub
 ```
 
-**Automatic Backup:**
-- Backups are automatically created when writing code
-- Saved to: `%USERPROFILE%\.vba-mcp-server\backups\`
+⚠️ **Important:** VBA code changes are irreversible. Always backup your files before making changes.
 
 ## Troubleshooting
 
@@ -270,22 +268,6 @@ User: Rewrite only the Test function in Module1
 Claude: Updated the Test function.
 ```
 
-### Checking Backups
-
-Backups are saved to:
-
-```
-%USERPROFILE%\.vba-mcp-server\backups\
-├── sample.xlsm_Module1_20251226_103045.bas
-├── sample.xlsm_Module1_20251226_103112.bas
-└── ...
-```
-
-**Restore:**
-1. Open backup file (.bas)
-2. In VBA Editor: "File > Import File"
-3. Select backup file
-
 ## Best Practices
 
 ### 1. Pre-Work Preparation
@@ -298,8 +280,8 @@ Backups are saved to:
 ### 2. Safe Operation
 
 - [ ] Make copy of important files beforehand
-- [ ] Confirm backup feature is enabled
-- [ ] Manual backup before major changes
+- [ ] Use Git or other version control for VBA code
+- [ ] Test changes in a copy before applying to production files
 
 ### 3. Performance
 
@@ -314,7 +296,7 @@ VBA MCP Server **accesses VBA code through running Excel/Access instances**. Thi
 ✅ **Benefits:**
 - Safe operations using Office's official API
 - Works with all Office versions
-- Safety through automatic backups
+- Direct integration with VBA project object model
 
 ⚠️ **Limitations:**
 - Must launch application
@@ -503,9 +485,7 @@ Sub DebugPrint(data As Variant)
 End Sub
 ```
 
-**自動バックアップ:**
-- コード書き込み時、自動的にバックアップが作成されます
-- 保存先: `%USERPROFILE%\.vba-mcp-server\backups\`
+⚠️ **重要:** VBA コードの変更は不可逆的です。変更前に必ずファイルのバックアップを取ってください。
 
 ## トラブルシューティング
 
@@ -591,22 +571,6 @@ User: Module1のTest関数だけを書き換えて
 Claude: Test関数を更新しました。
 ```
 
-### バックアップの確認
-
-バックアップは以下の場所に保存されます:
-
-```
-%USERPROFILE%\.vba-mcp-server\backups\
-├── sample.xlsm_Module1_20251226_103045.bas
-├── sample.xlsm_Module1_20251226_103112.bas
-└── ...
-```
-
-**リストア:**
-1. バックアップファイル(.bas)を開く
-2. VBAエディタで「ファイル > ファイルのインポート」
-3. バックアップファイルを選択
-
 ## ベストプラクティス
 
 ### 1. 作業前の準備
@@ -619,8 +583,8 @@ Claude: Test関数を更新しました。
 ### 2. 安全な運用
 
 - [ ] 重要なファイルは事前にコピーを作成
-- [ ] バックアップ機能が有効なことを確認
-- [ ] 大規模な変更前に手動バックアップ
+- [ ] VBAコードのバージョン管理にGitなどを使用
+- [ ] 本番ファイルに適用する前にコピーでテスト
 
 ### 3. パフォーマンス
 
@@ -635,7 +599,7 @@ VBA MCP Serverは、**実行中のExcel/Accessインスタンスを介してVBA�
 ✅ **利点:**
 - Officeの公式APIを使用した安全な操作
 - すべてのOfficeバージョンで動作
-- 自動バックアップによる安全性
+- VBAプロジェクトオブジェクトモデルとの直接統合
 
 ⚠️ **制約:**
 - アプリケーションを起動する必要がある

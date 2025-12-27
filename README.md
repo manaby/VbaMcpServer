@@ -17,7 +17,6 @@ An MCP (Model Context Protocol) server that enables AI coding assistants like Cl
 - 📖 **Read VBA modules** - List and read code from any VBA module
 - ✏️ **Write VBA modules** - Update or create VBA code programmatically
 - 📦 **Export/Import** - Export modules to files and import them back
-- 🔒 **Auto-backup** - Automatic backup before any write operation
 - 🔍 **Procedure-level access** - Read and write individual procedures
 
 ### Supported Module Types
@@ -69,13 +68,14 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 #### Using GUI Manager
 
 1. Launch "VBA MCP Server Manager" from Start Menu
-2. The GUI automatically detects VbaMcpServer.exe using:
-   - Registry entry (set by installer)
-   - Same directory location
-   - Development build detection
-3. (Optional) Override path in `appsettings.json` if needed
-4. Click "Start" to run the MCP server
-5. Monitor logs in real-time
+2. **Click "Browse" button to select your target Excel/Access file**
+3. Click "Start" to run the MCP server
+4. Monitor logs in real-time
+
+**Notes:**
+- The GUI automatically detects VbaMcpServer.exe using registry entry (set by installer) or same directory location
+- You can override the server path in `appsettings.json` if needed
+- The selected target file will be automatically opened when the server starts
 
 For detailed configuration options, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
@@ -104,6 +104,46 @@ Or if you built from source:
   }
 }
 ```
+
+Or for Claude Code (CLI tool):
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**macOS/Linux:**
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "/path/to/VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+Configuration file location:
+- Windows: `%USERPROFILE%\.claude\settings.json`
+- macOS/Linux: `~/.claude/settings.json`
+
+## ⚠️ Important: Backup and Version Control
+
+**This tool does NOT provide automatic backup functionality.** VBA code changes are irreversible operations. You are responsible for protecting your work:
+
+### Recommended Practices
+
+1. **Use Git for VBA Code**: Manage your VBA code with Git or other version control systems
+2. **Backup Files Before Editing**: Always create a copy of your Excel/Access file before making code changes
+3. **Use Office AutoSave**: If using OneDrive/SharePoint, leverage the automatic version history feature
+
+**VBA code modifications are permanent and cannot be undone by this tool. Always backup your files before making changes.**
 
 ## Usage Examples
 
@@ -192,7 +232,6 @@ Excel や Access の VBA コードを、Claude Desktop や Cursor などの AI �
 - 📖 **VBA モジュールの読み取り** - すべての VBA モジュールの一覧表示とコード取得
 - ✏️ **VBA モジュールの書き込み** - プログラムからの VBA コード更新・作成
 - 📦 **エクスポート/インポート** - モジュールのファイル出力と読み込み
-- 🔒 **自動バックアップ** - 書き込み操作前の自動バックアップ
 - 🔍 **プロシージャ単位のアクセス** - 個別のプロシージャの読み書き
 
 ### 対応モジュールタイプ
@@ -244,13 +283,14 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 #### GUI マネージャーを使用
 
 1. スタートメニューから「VBA MCP Server Manager」を起動
-2. GUI は以下の方法で VbaMcpServer.exe を自動検出します:
-   - レジストリエントリ（インストーラーで設定）
-   - 同じディレクトリ内の検索
-   - 開発ビルドの自動検出
-3. （オプション）必要に応じて `appsettings.json` でパスを上書き可能
-4. 「Start」ボタンをクリックして MCP サーバーを実行
-5. リアルタイムでログを監視
+2. **「Browse」ボタンをクリックして対象の Excel/Access ファイルを選択**
+3. 「Start」ボタンをクリックして MCP サーバーを実行
+4. リアルタイムでログを監視
+
+**注意事項:**
+- GUI は VbaMcpServer.exe をレジストリエントリ（インストーラーで設定）または同じディレクトリから自動検出します
+- 必要に応じて `appsettings.json` でサーバーパスを上書き可能です
+- 選択したターゲットファイルはサーバー起動時に自動的に開かれます
 
 詳細な設定オプションは [docs/CONFIGURATION.md](docs/CONFIGURATION.md) を参照してください。
 
@@ -279,6 +319,46 @@ Claude Desktop の設定ファイル（`%APPDATA%\Claude\claude_desktop_config.j
   }
 }
 ```
+
+Claude Code(CLI ツール)の場合:
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "C:\\Program Files\\VBA MCP Server\\VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+**macOS/Linux:**
+```json
+{
+  "mcpServers": {
+    "vba": {
+      "command": "/path/to/VbaMcpServer.exe"
+    }
+  }
+}
+```
+
+設定ファイルの場所:
+- Windows: `%USERPROFILE%\.claude\settings.json`
+- macOS/Linux: `~/.claude/settings.json`
+
+## ⚠️ 重要: バックアップとバージョン管理
+
+**本ツールは自動バックアップ機能を提供しません。** VBA コードの変更は不可逆的な操作です。作業内容の保護は利用者の責任で行ってください：
+
+### 推奨される対策
+
+1. **Git で VBA コードを管理**: Git などのバージョン管理システムで VBA コードを管理する
+2. **編集前にファイルをバックアップ**: コード変更前に必ず Excel/Access ファイルのコピーを作成する
+3. **Office の自動保存を活用**: OneDrive/SharePoint を使用している場合は、自動バージョン履歴機能を活用する
+
+**VBA コードの変更は永続的であり、本ツールでは元に戻せません。変更前に必ずファイルのバックアップを取ってください。**
 
 ## 使用例
 

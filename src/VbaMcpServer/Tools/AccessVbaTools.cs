@@ -8,48 +8,48 @@ using VbaMcpServer.Services;
 namespace VbaMcpServer.Tools;
 
 /// <summary>
-/// MCP Tools for Excel VBA operations
+/// MCP Tools for Access VBA operations
 /// </summary>
 [McpServerToolType]
-public class ExcelVbaTools
+public class AccessVbaTools
 {
-    private readonly ExcelComService _excelService;
+    private readonly AccessComService _accessService;
 
-    public ExcelVbaTools(ExcelComService excelService)
+    public AccessVbaTools(AccessComService accessService)
     {
-        _excelService = excelService;
+        _accessService = accessService;
     }
 
-    [McpServerTool(Name = "list_open_excel_files")]
-    [Description("List all currently open Excel workbooks that contain VBA projects (.xlsm, .xlsb, .xls)")]
-    public string ListOpenExcelFiles()
+    [McpServerTool(Name = "list_open_access_files")]
+    [Description("List all currently open Access databases that contain VBA projects (.accdb, .mdb)")]
+    public string ListOpenAccessFiles()
     {
-        var workbooks = _excelService.ListOpenWorkbooks();
-        
-        if (workbooks.Count == 0)
+        var databases = _accessService.ListOpenDatabases();
+
+        if (databases.Count == 0)
         {
-            return "No Excel workbooks are currently open, or Excel is not running.";
+            return "No Access databases are currently open, or Access is not running.";
         }
 
         var result = new
         {
-            count = workbooks.Count,
-            workbooks = workbooks
+            count = databases.Count,
+            databases = databases
         };
 
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    [McpServerTool(Name = "list_vba_modules")]
-    [Description("List all VBA modules in an Excel workbook. The workbook must be open in Excel.")]
-    public string ListVbaModules(
-        [Description("Full file path to the Excel workbook (e.g., C:\\Projects\\MyWorkbook.xlsm)")] 
+    [McpServerTool(Name = "list_access_vba_modules")]
+    [Description("List all VBA modules in an Access database. The database must be open in Access.")]
+    public string ListAccessVbaModules(
+        [Description("Full file path to the Access database (e.g., C:\\Projects\\MyDatabase.accdb)")]
         string filePath)
     {
         try
         {
-            var modules = _excelService.ListModules(filePath);
-            
+            var modules = _accessService.ListModules(filePath);
+
             var result = new
             {
                 file = filePath,
@@ -61,7 +61,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}. Please open the file in Excel first.";
+            return $"Error: Database not found or not open: {filePath}. Please open the file in Access first.";
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -69,18 +69,18 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "read_vba_module")]
-    [Description("Read the complete VBA code from a module. The workbook must be open in Excel.")]
-    public string ReadVbaModule(
-        [Description("Full file path to the Excel workbook")] 
+    [McpServerTool(Name = "read_access_vba_module")]
+    [Description("Read the complete VBA code from a module in an Access database. The database must be open in Access.")]
+    public string ReadAccessVbaModule(
+        [Description("Full file path to the Access database")]
         string filePath,
-        [Description("Name of the VBA module to read (e.g., Module1, Sheet1, ThisWorkbook)")] 
+        [Description("Name of the VBA module to read (e.g., Module1, Form_MainForm, Report_Report1)")]
         string moduleName)
     {
         try
         {
-            var code = _excelService.ReadModule(filePath, moduleName);
-            
+            var code = _accessService.ReadModule(filePath, moduleName);
+
             if (string.IsNullOrEmpty(code))
             {
                 return $"Module '{moduleName}' exists but contains no code.";
@@ -98,7 +98,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (ArgumentException ex)
         {
@@ -110,10 +110,10 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "write_vba_module")]
-    [Description("Write VBA code to a module, replacing its entire content. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. The workbook must be open in Excel.")]
-    public string WriteVbaModule(
-        [Description("Full file path to the Excel workbook")]
+    [McpServerTool(Name = "write_access_vba_module")]
+    [Description("Write VBA code to a module in an Access database, replacing its entire content. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. The database must be open in Access.")]
+    public string WriteAccessVbaModule(
+        [Description("Full file path to the Access database")]
         string filePath,
         [Description("Name of the VBA module to write to")]
         string moduleName,
@@ -123,7 +123,7 @@ public class ExcelVbaTools
         try
         {
             // Write new code
-            _excelService.WriteModule(filePath, moduleName, code);
+            _accessService.WriteModule(filePath, moduleName, code);
 
             var result = new
             {
@@ -137,7 +137,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (ArgumentException ex)
         {
@@ -149,14 +149,14 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "create_vba_module")]
-    [Description("Create a new VBA module in an Excel workbook. The workbook must be open in Excel.")]
-    public string CreateVbaModule(
-        [Description("Full file path to the Excel workbook")] 
+    [McpServerTool(Name = "create_access_vba_module")]
+    [Description("Create a new VBA module in an Access database. The database must be open in Access.")]
+    public string CreateAccessVbaModule(
+        [Description("Full file path to the Access database")]
         string filePath,
-        [Description("Name for the new module")] 
+        [Description("Name for the new module")]
         string moduleName,
-        [Description("Type of module: 'standard' (default), 'class', or 'userform'")] 
+        [Description("Type of module: 'standard' (default), 'class', or 'userform'")]
         string moduleType = "standard")
     {
         try
@@ -169,7 +169,7 @@ public class ExcelVbaTools
                 _ => VbaModuleType.StdModule
             };
 
-            _excelService.CreateModule(filePath, moduleName, type);
+            _accessService.CreateModule(filePath, moduleName, type);
 
             var result = new
             {
@@ -183,7 +183,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -191,17 +191,17 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "delete_vba_module")]
-    [Description("Delete a VBA module from an Excel workbook. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. Cannot delete document modules (ThisWorkbook, Sheet modules).")]
-    public string DeleteVbaModule(
-        [Description("Full file path to the Excel workbook")]
+    [McpServerTool(Name = "delete_access_vba_module")]
+    [Description("Delete a VBA module from an Access database. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. Cannot delete document modules (Forms, Reports with code-behind).")]
+    public string DeleteAccessVbaModule(
+        [Description("Full file path to the Access database")]
         string filePath,
         [Description("Name of the module to delete")]
         string moduleName)
     {
         try
         {
-            _excelService.DeleteModule(filePath, moduleName);
+            _accessService.DeleteModule(filePath, moduleName);
 
             var result = new
             {
@@ -215,7 +215,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (ArgumentException ex)
         {
@@ -231,19 +231,19 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "export_vba_module")]
-    [Description("Export a VBA module to a file (.bas, .cls, or .frm)")]
-    public string ExportVbaModule(
-        [Description("Full file path to the Excel workbook")] 
+    [McpServerTool(Name = "export_access_vba_module")]
+    [Description("Export a VBA module from an Access database to a file (.bas, .cls, or .frm)")]
+    public string ExportAccessVbaModule(
+        [Description("Full file path to the Access database")]
         string filePath,
-        [Description("Name of the module to export")] 
+        [Description("Name of the module to export")]
         string moduleName,
-        [Description("Output file path (e.g., C:\\Exports\\Module1.bas)")] 
+        [Description("Output file path (e.g., C:\\Exports\\Module1.bas)")]
         string outputPath)
     {
         try
         {
-            _excelService.ExportModule(filePath, moduleName, outputPath);
+            _accessService.ExportModule(filePath, moduleName, outputPath);
 
             var result = new
             {
@@ -257,7 +257,7 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (ArgumentException ex)
         {
@@ -269,15 +269,15 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "list_vba_procedures")]
-    [Description("List all procedures in a VBA module with detailed metadata including name, type, line numbers, and access modifiers")]
-    public string ListVbaProcedures(
-        [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,
+    [McpServerTool(Name = "list_access_vba_procedures")]
+    [Description("List all procedures in an Access VBA module with detailed metadata including name, type, line numbers, and access modifiers")]
+    public string ListAccessVbaProcedures(
+        [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
         [Description("Name of the VBA module to list procedures from")] string moduleName)
     {
         try
         {
-            var procedures = _excelService.ListProcedures(filePath, moduleName);
+            var procedures = _accessService.ListProcedures(filePath, moduleName);
 
             var result = new
             {
@@ -298,11 +298,11 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (VbaProjectAccessDeniedException ex)
         {
-            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Excel's Trust Center settings.";
+            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Access's Trust Center settings.";
         }
         catch (ModuleNotFoundException ex)
         {
@@ -314,16 +314,16 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "read_vba_procedure")]
-    [Description("Read the code of a specific procedure from a VBA module")]
-    public string ReadVbaProcedure(
-        [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,
+    [McpServerTool(Name = "read_access_vba_procedure")]
+    [Description("Read the code of a specific procedure from an Access VBA module")]
+    public string ReadAccessVbaProcedure(
+        [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
         [Description("Name of the VBA module containing the procedure")] string moduleName,
         [Description("Name of the procedure to read (Sub, Function, or Property)")] string procedureName)
     {
         try
         {
-            var code = _excelService.ReadProcedure(filePath, moduleName, procedureName);
+            var code = _accessService.ReadProcedure(filePath, moduleName, procedureName);
 
             var result = new
             {
@@ -338,11 +338,11 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (VbaProjectAccessDeniedException ex)
         {
-            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Excel's Trust Center settings.";
+            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Access's Trust Center settings.";
         }
         catch (ModuleNotFoundException ex)
         {
@@ -358,17 +358,17 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "write_vba_procedure")]
-    [Description("Write or replace a specific procedure in a VBA module. IMPORTANT: This operation is irreversible. The procedure will be replaced with the new code.")]
-    public string WriteVbaProcedure(
-        [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,
+    [McpServerTool(Name = "write_access_vba_procedure")]
+    [Description("Write or replace a specific procedure in an Access VBA module. IMPORTANT: This operation is irreversible. The procedure will be replaced with the new code.")]
+    public string WriteAccessVbaProcedure(
+        [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
         [Description("Name of the VBA module containing the procedure")] string moduleName,
         [Description("Name of the procedure to write/replace (Sub, Function, or Property)")] string procedureName,
         [Description("The complete VBA code for the procedure, including the procedure declaration (Sub/Function/Property) and End statement")] string code)
     {
         try
         {
-            _excelService.WriteProcedure(filePath, moduleName, procedureName, code);
+            _accessService.WriteProcedure(filePath, moduleName, procedureName, code);
 
             var result = new
             {
@@ -384,11 +384,11 @@ public class ExcelVbaTools
         }
         catch (FileNotFoundException)
         {
-            return $"Error: Workbook not found or not open: {filePath}";
+            return $"Error: Database not found or not open: {filePath}";
         }
         catch (VbaProjectAccessDeniedException ex)
         {
-            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Excel's Trust Center settings.";
+            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Access's Trust Center settings.";
         }
         catch (ModuleNotFoundException ex)
         {

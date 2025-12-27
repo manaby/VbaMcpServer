@@ -76,4 +76,4 @@ installer/Output/
 # User-specific files
 *.rsuser
 *.log
-.claude/settings.local.json
+.claude/

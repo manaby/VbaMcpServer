@@ -46,7 +46,6 @@ class Program
         // Register services
         builder.Services.AddSingleton<ExcelComService>();
         builder.Services.AddSingleton<AccessComService>();
-        builder.Services.AddSingleton<BackupService>();
         builder.Services.AddSingleton<IVbaEditLogger, VbaEditLogger>();
 
         // Configure MCP Server

@@ -338,4 +338,294 @@ public class ExcelComService
 
         return count;
     }
+
+    /// <summary>
+    /// List all procedures in a module with detailed metadata
+    /// </summary>
+    public List<ProcedureInfo> ListProcedures(string filePath, string moduleName)
+    {
+        var workbook = GetWorkbook(filePath);
+        var procedures = new List<ProcedureInfo>();
+
+        try
+        {
+            var vbProject = workbook!.VBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            var codeModule = component.CodeModule;
+            var lineCount = codeModule.CountOfLines;
+
+            if (lineCount == 0)
+            {
+                return procedures;
+            }
+
+            var processedProcedures = new HashSet<string>();
+
+            for (int line = 1; line <= lineCount; line++)
+            {
+                try
+                {
+                    var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind procKind);
+
+                    if (!string.IsNullOrEmpty(procName) && !processedProcedures.Contains(procName))
+                    {
+                        processedProcedures.Add(procName);
+
+                        var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                        var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+                        var procType = GetProcedureTypeName(procKind);
+
+                        // Get access modifier by analyzing the first line of the procedure
+                        string? accessModifier = null;
+                        if (startLine > 0 && startLine <= lineCount)
+                        {
+                            var firstLine = codeModule.Lines[startLine, 1].Trim();
+                            accessModifier = GetAccessModifier(firstLine);
+                        }
+
+                        var procedureInfo = new ProcedureInfo
+                        {
+                            Name = procName,
+                            Type = procType,
+                            StartLine = startLine,
+                            LineCount = procLineCount,
+                            AccessModifier = accessModifier
+                        };
+
+                        procedures.Add(procedureInfo);
+                        _logger.LogDebug("Found procedure: {Name} ({Type}), lines {Start}-{End}",
+                            procName, procType, startLine, startLine + procLineCount - 1);
+                    }
+                }
+                catch
+                {
+                    // Skip lines that are not in a procedure
+                }
+            }
+
+            _logger.LogDebug("Found {Count} procedures in module {Module}", procedures.Count, moduleName);
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing procedures in module {Module} from {Path}", moduleName, filePath);
+            throw new VbaOperationException($"Failed to list procedures in module '{moduleName}': {ex.Message}", ex);
+        }
+
+        return procedures;
+    }
+
+    /// <summary>
+    /// Read code of a specific procedure
+    /// </summary>
+    public string ReadProcedure(string filePath, string moduleName, string procedureName)
+    {
+        var workbook = GetWorkbook(filePath);
+
+        try
+        {
+            var vbProject = workbook!.VBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            var codeModule = component.CodeModule;
+            var lineCount = codeModule.CountOfLines;
+
+            if (lineCount == 0)
+            {
+                throw new ArgumentException($"Module '{moduleName}' is empty");
+            }
+
+            // Search for the procedure
+            for (int line = 1; line <= lineCount; line++)
+            {
+                try
+                {
+                    var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind procKind);
+
+                    if (!string.IsNullOrEmpty(procName) && procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                        var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+
+                        var code = codeModule.Lines[startLine, procLineCount];
+                        _logger.LogDebug("Read procedure {Procedure} ({Lines} lines) from module {Module}",
+                            procedureName, procLineCount, moduleName);
+
+                        return code;
+                    }
+                }
+                catch
+                {
+                    // Continue searching
+                }
+            }
+
+            throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'");
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading procedure {Procedure} from module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+            throw new VbaOperationException($"Failed to read procedure '{procedureName}': {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Write/replace a specific procedure in a module
+    /// </summary>
+    public void WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
+    {
+        var workbook = GetWorkbook(filePath);
+
+        try
+        {
+            var vbProject = workbook!.VBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            var codeModule = component.CodeModule;
+            var lineCount = codeModule.CountOfLines;
+
+            if (lineCount == 0)
+            {
+                throw new ArgumentException($"Module '{moduleName}' is empty");
+            }
+
+            // Search for the procedure
+            bool found = false;
+            for (int line = 1; line <= lineCount; line++)
+            {
+                try
+                {
+                    var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind procKind);
+
+                    if (!string.IsNullOrEmpty(procName) && procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                        var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+
+                        // Delete the existing procedure
+                        codeModule.DeleteLines(startLine, procLineCount);
+
+                        // Insert the new code at the same position
+                        if (!string.IsNullOrEmpty(newCode))
+                        {
+                            codeModule.InsertLines(startLine, newCode);
+                        }
+
+                        found = true;
+                        _logger.LogInformation("Replaced procedure {Procedure} in module {Module} in {Path}",
+                            procedureName, moduleName, filePath);
+                        break;
+                    }
+                }
+                catch
+                {
+                    // Continue searching
+                }
+            }
+
+            if (!found)
+            {
+                throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'");
+            }
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error writing procedure {Procedure} to module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+            throw new VbaOperationException($"Failed to write procedure '{procedureName}': {ex.Message}", ex);
+        }
+    }
+
+    private string GetProcedureTypeName(VBIDE.vbext_ProcKind procKind)
+    {
+        return procKind switch
+        {
+            VBIDE.vbext_ProcKind.vbext_pk_Proc => "Sub/Function",
+            VBIDE.vbext_ProcKind.vbext_pk_Get => "Property Get",
+            VBIDE.vbext_ProcKind.vbext_pk_Let => "Property Let",
+            VBIDE.vbext_ProcKind.vbext_pk_Set => "Property Set",
+            _ => "Unknown"
+        };
+    }
+
+    private string? GetAccessModifier(string firstLine)
+    {
+        var lowerLine = firstLine.ToLowerInvariant();
+
+        if (lowerLine.StartsWith("public "))
+            return "Public";
+        if (lowerLine.StartsWith("private "))
+            return "Private";
+        if (lowerLine.StartsWith("friend "))
+            return "Friend";
+
+        // Default to Public if not specified
+        return "Public";
+    }
 }

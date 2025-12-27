@@ -85,21 +85,15 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | モジュール操作 | Excel と同等の機能 | 将来 |
 | フォーム/レポートのコードビハインド | フォーム・レポートの VBA コード操作 | 将来 |
 
-### 3.3 安全機能
+### 3.3 バージョン管理とバックアップ（ユーザー責任）
 
-#### 3.3.1 自動バックアップ
-| 項目 | 仕様 |
-|------|------|
-| バックアップタイミング | モジュール書き込み・削除の前 |
-| 保存先 | `%USERPROFILE%\.vba-mcp-server\backups\` |
-| ファイル名形式 | `{元ファイル名}_{モジュール名}_{timestamp}.bas` |
-| 保持期間 | 30日（設定可能） |
+| 推奨事項 | 説明 |
+|----------|------|
+| Git によるバージョン管理 | VBA コードを Git で管理することを強く推奨 |
+| 事前のファイルコピー | コード変更前に、対象ファイル全体のバックアップコピーを作成 |
+| Office の自動保存 | OneDrive/SharePoint 使用時は自動バージョン履歴を活用 |
 
-#### 3.3.2 バックアップ管理
-| 機能 | 説明 |
-|------|------|
-| バックアップ一覧 | 作成されたバックアップの一覧表示 |
-| フィルタリング | ソースファイル別にフィルタリング可能 |
+**重要**: 本ツールは自動バックアップ機能を提供しません。VBA コードの変更は不可逆的な操作となるため、必ず事前にファイル全体のバックアップを取ってください。
 
 ---
 
@@ -116,7 +110,6 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | `CreateVbaModule` | 新規 VBA モジュールを作成 |
 | `DeleteVbaModule` | VBA モジュールを削除 |
 | `ExportVbaModule` | モジュールをファイルにエクスポート |
-| `ListVbaBackups` | バックアップ一覧を取得 |
 
 ### 4.2 ツール詳細
 
@@ -171,9 +164,7 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
   success: boolean,
   file: string,
   module: string,
-  linesWritten: number,
-  backupCreated: boolean,
-  backupPath: string | null
+  linesWritten: number
 }
 ```
 
@@ -202,8 +193,7 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
   success: boolean,
   file: string,
   module: string,
-  deleted: boolean,
-  backupPath: string
+  deleted: boolean
 }
 ```
 
@@ -222,22 +212,6 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 }
 ```
 
-#### ListVbaBackups
-```
-入力: {
-  filePath?: string  // オプション: フィルタリング用
-}
-出力: {
-  count: number,
-  backups: [{
-    fileName: string,
-    createdAt: string,
-    sizeBytes: number,
-    fullPath: string
-  }]
-}
-```
-
 ---
 
 ## 5. 非機能要件
@@ -248,14 +222,14 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 |------|------|
 | VBA プロジェクトアクセス | Office の「VBA プロジェクト オブジェクト モデルへのアクセスを信頼する」設定が必須 |
 | ローカル実行 | サーバーはローカルマシンでのみ実行（リモートアクセス不可） |
-| 自動バックアップ | 破壊的操作の前に必ずバックアップを作成 |
+| ユーザー責任のバックアップ | 破壊的操作の前にユーザー自身がファイルのバックアップを取ること |
 
 ### 5.2 パフォーマンス
 
 | 要件 | 目標値 |
 |------|--------|
 | モジュール読み取り | 1秒以内 |
-| モジュール書き込み | 2秒以内（バックアップ含む） |
+| モジュール書き込み | 1秒以内 |
 | ワークブック一覧取得 | 500ms 以内 |
 
 ### 5.3 配布形式
@@ -330,7 +304,6 @@ Excel/Access で以下の設定を有効にする必要があります：
 ### Phase 1: Excel 基本機能（現在）
 - [x] Excel COM 接続
 - [x] モジュール読み書き
-- [x] 自動バックアップ
 - [x] MCP サーバー実装
 
 ### Phase 2: 安定化・テスト ✅ 完了
