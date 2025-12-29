@@ -403,4 +403,635 @@ public class AccessVbaTools
             return $"Error writing procedure: {ex.Message}";
         }
     }
+
+    #region Table Tools
+
+    [McpServerTool(Name = "list_access_tables")]
+    [Description("List all tables in an Access database")]
+    public string ListAccessTables(
+        [Description("Full file path to the Access database (e.g., C:\\Projects\\MyDatabase.accdb)")] string filePath,
+        [Description("Include system tables (default: false)")] bool includeSystemTables = false,
+        [Description("Output format: 'json' or 'csv' (default: 'json')")] string format = "json")
+    {
+        try
+        {
+            var tables = _accessService.ListTables(filePath, includeSystemTables);
+
+            if (format.ToLowerInvariant() == "csv")
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Name,Type,RecordCount,DateCreated,DateModified");
+                foreach (var table in tables)
+                {
+                    csv.AppendLine($"{table.Name},{table.Type},{table.RecordCount},{table.DateCreated},{table.DateModified}");
+                }
+                return csv.ToString();
+            }
+
+            var result = new
+            {
+                file = filePath,
+                tableCount = tables.Count,
+                tables = tables
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}. Please open the file in Access first.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_table_structure")]
+    [Description("Get the structure (field definitions) of an Access table")]
+    public string GetAccessTableStructure(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Table name")] string tableName,
+        [Description("Output format: 'json' or 'csv' (default: 'json')")] string format = "json")
+    {
+            try
+        {
+            var fields = _accessService.GetTableStructure(filePath, tableName);
+
+            if (format.ToLowerInvariant() == "csv")
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Name,DataType,Size,Required,AllowZeroLength,DefaultValue,ValidationRule,IsPrimaryKey,IsIndexed");
+                foreach (var field in fields)
+                {
+                    csv.AppendLine($"{field.Name},{field.DataType},{field.Size},{field.Required},{field.AllowZeroLength},{field.DefaultValue},{field.ValidationRule},{field.IsPrimaryKey},{field.IsIndexed}");
+                }
+                return csv.ToString();
+            }
+
+            var result = new
+            {
+                file = filePath,
+                table = tableName,
+                fieldCount = fields.Count,
+                fields = fields
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (TableNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_table_data")]
+    [Description("Get data from an Access table with optional WHERE clause and pagination")]
+    public string GetAccessTableData(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Table name")] string tableName,
+        [Description("WHERE clause without 'WHERE' keyword (optional)")] string? whereClause = null,
+        [Description("Maximum rows to return (default: 100, max: 1000)")] int limit = 100,
+        [Description("Number of rows to skip (default: 0)")] int offset = 0,
+        [Description("Output format: 'json' or 'csv' (default: 'json')")] string format = "json")
+    {
+        try
+        {
+            var data = _accessService.GetTableData(filePath, tableName, whereClause, limit, offset);
+
+            if (format.ToLowerInvariant() == "csv")
+            {
+                return _accessService.FormatAsCsv(data);
+            }
+
+            var result = new
+            {
+                file = filePath,
+                table = tableName,
+                whereClause = whereClause,
+                totalRows = data.TotalRows,
+                returnedRows = data.ReturnedRows,
+                hasMore = data.HasMore,
+                data = data
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (TableNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (InvalidSqlException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
+
+    #region Query Tools
+
+    [McpServerTool(Name = "list_access_queries")]
+    [Description("List all saved queries in an Access database")]
+    public string ListAccessQueries(
+        [Description("Full file path to the Access database (e.g., C:\\Projects\\MyDatabase.accdb)")] string filePath,
+        [Description("Output format: 'json' or 'csv' (default: 'json')")] string format = "json")
+    {
+        try
+        {
+            var queries = _accessService.ListQueries(filePath);
+
+            if (format.ToLowerInvariant() == "csv")
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Name,QueryType,ParameterCount,DateCreated,DateModified");
+                foreach (var query in queries)
+                {
+                    csv.AppendLine($"{query.Name},{query.QueryType},{query.ParameterCount},{query.DateCreated},{query.DateModified}");
+                }
+                return csv.ToString();
+            }
+
+            var result = new
+            {
+                file = filePath,
+                queryCount = queries.Count,
+                queries = queries
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}. Please open the file in Access first.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_query_sql")]
+    [Description("Get the SQL text of a saved Access query")]
+    public string GetAccessQuerySql(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Query name")] string queryName)
+    {
+        try
+        {
+            var sql = _accessService.GetQuerySql(filePath, queryName);
+
+            var result = new
+            {
+                file = filePath,
+                query = queryName,
+                sql = sql
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (QueryNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_queries to see available queries.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "execute_access_query")]
+    [Description("Execute a saved Access query and return the results")]
+    public string ExecuteAccessQuery(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Query name")] string queryName,
+        [Description("Query parameters as JSON object (optional)")] string? parametersJson = null,
+        [Description("Maximum rows to return for SELECT queries (default: 100)")] int limit = 100,
+        [Description("Number of rows to skip (default: 0)")] int offset = 0,
+        [Description("Output format: 'json' or 'csv' (default: 'json')")] string format = "json")
+    {
+        try
+        {
+            Dictionary<string, object>? parameters = null;
+            if (!string.IsNullOrWhiteSpace(parametersJson))
+            {
+                parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(parametersJson);
+            }
+
+            var queryResult = _accessService.ExecuteQuery(filePath, queryName, parameters, limit, offset);
+
+            if (queryResult is TableDataResult tableData)
+            {
+                if (format.ToLowerInvariant() == "csv")
+                {
+                    return _accessService.FormatAsCsv(tableData);
+                }
+
+                var result = new
+                {
+                    file = filePath,
+                    query = queryName,
+                    resultType = "data",
+                    totalRows = tableData.TotalRows,
+                    returnedRows = tableData.ReturnedRows,
+                    hasMore = tableData.HasMore,
+                    data = tableData
+                };
+
+                return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+            }
+            else if (queryResult is QueryExecutionResult execResult)
+            {
+                var result = new
+                {
+                    file = filePath,
+                    query = queryName,
+                    resultType = "execution",
+                    success = execResult.Success,
+                    recordsAffected = execResult.RecordsAffected,
+                    message = execResult.Message
+                };
+
+                return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+            }
+
+            return "Error: Unknown result type";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (QueryNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_queries to see available queries.";
+        }
+        catch (QueryExecutionException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "save_access_query")]
+    [Description("Save (create or update) a query in an Access database")]
+    public string SaveAccessQuery(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Query name")] string queryName,
+        [Description("SQL statement")] string sql,
+        [Description("Replace if exists (default: false)")] bool replaceIfExists = false)
+    {
+        try
+        {
+            _accessService.SaveQuery(filePath, queryName, sql, replaceIfExists);
+
+            var result = new
+            {
+                success = true,
+                file = filePath,
+                query = queryName,
+                message = replaceIfExists ? "Query replaced successfully" : "Query created successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (QueryAlreadyExistsException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "delete_access_query")]
+    [Description("Delete a saved query from an Access database")]
+    public string DeleteAccessQuery(
+        [Description("Full file path to the Access database")] string filePath,
+        [Description("Query name")] string queryName)
+    {
+        try
+        {
+            _accessService.DeleteQuery(filePath, queryName);
+
+            var result = new
+            {
+                success = true,
+                file = filePath,
+                query = queryName,
+                message = "Query deleted successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (QueryNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_queries to see available queries.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
+
+    #region Relationship and Index Tools
+
+    [McpServerTool(Name = "list_access_relationships")]
+    [Description("List all relationships between tables in an Access database")]
+    public string ListAccessRelationships(
+        [Description("Full file path to the Access database")]
+        string filePath)
+    {
+        try
+        {
+            var relationships = _accessService.ListRelationships(filePath);
+
+            if (relationships.Count == 0)
+            {
+                return "No relationships found in the database.";
+            }
+
+            var result = new
+            {
+                count = relationships.Count,
+                relationships = relationships
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_table_indexes")]
+    [Description("Get all indexes for a specific table in an Access database")]
+    public string GetAccessTableIndexes(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the table")]
+        string tableName)
+    {
+        try
+        {
+            var indexes = _accessService.GetTableIndexes(filePath, tableName);
+
+            if (indexes.Count == 0)
+            {
+                return $"No indexes found for table '{tableName}'.";
+            }
+
+            var result = new
+            {
+                table = tableName,
+                count = indexes.Count,
+                indexes = indexes
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (TableNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_tables to see available tables.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
+
+    #region Database Information Tools
+
+    [McpServerTool(Name = "get_access_database_info")]
+    [Description("Get summary information about an Access database (file size, table count, query count, etc.)")]
+    public string GetAccessDatabaseInfo(
+        [Description("Full file path to the Access database")]
+        string filePath)
+    {
+        try
+        {
+            var info = _accessService.GetDatabaseInfo(filePath);
+            return JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "list_access_forms")]
+    [Description("List all forms in an Access database")]
+    public string ListAccessForms(
+        [Description("Full file path to the Access database")]
+        string filePath)
+    {
+        try
+        {
+            var forms = _accessService.ListForms(filePath);
+
+            if (forms.Count == 0)
+            {
+                return "No forms found in the database.";
+            }
+
+            var result = new
+            {
+                count = forms.Count,
+                forms = forms
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "list_access_reports")]
+    [Description("List all reports in an Access database")]
+    public string ListAccessReports(
+        [Description("Full file path to the Access database")]
+        string filePath)
+    {
+        try
+        {
+            var reports = _accessService.ListReports(filePath);
+
+            if (reports.Count == 0)
+            {
+                return "No reports found in the database.";
+            }
+
+            var result = new
+            {
+                count = reports.Count,
+                reports = reports
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
+
+    #region Export Tools
+
+    [McpServerTool(Name = "export_access_table_to_csv")]
+    [Description("Export Access table data to a CSV file")]
+    public string ExportAccessTableToCsv(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the table to export")]
+        string tableName,
+        [Description("Full file path for the output CSV file")]
+        string outputPath,
+        [Description("Optional WHERE clause to filter data (without 'WHERE' keyword)")]
+        string? whereClause = null,
+        [Description("Maximum number of rows to export (0 = unlimited, default: 0)")]
+        int limit = 0)
+    {
+        try
+        {
+            _accessService.ExportTableToCsv(filePath, tableName, outputPath, whereClause, limit);
+
+            var result = new
+            {
+                table = tableName,
+                outputFile = outputPath,
+                message = "Table exported successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (TableNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_tables to see available tables.";
+        }
+        catch (InvalidSqlException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "export_access_query_to_csv")]
+    [Description("Export Access query results to a CSV file")]
+    public string ExportAccessQueryToCsv(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the query to execute")]
+        string queryName,
+        [Description("Full file path for the output CSV file")]
+        string outputPath,
+        [Description("Maximum number of rows to export (0 = unlimited, default: 0)")]
+        int limit = 0)
+    {
+        try
+        {
+            _accessService.ExportQueryToCsv(filePath, queryName, outputPath, null, limit);
+
+            var result = new
+            {
+                query = queryName,
+                outputFile = outputPath,
+                message = "Query results exported successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (QueryNotFoundException ex)
+        {
+            return $"Error: {ex.Message}. Use list_access_queries to see available queries.";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
 }

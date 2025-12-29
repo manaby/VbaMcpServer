@@ -25,14 +25,19 @@ public class ExcelComService
     /// </summary>
     public bool IsExcelAvailable()
     {
+        Excel.Application? excel = null;
         try
         {
-            var excel = GetExcelApplication();
+            excel = GetExcelApplication();
             return excel != null;
         }
         catch
         {
             return false;
+        }
+        finally
+        {
+            ReleaseComObject(excel);
         }
     }
 
@@ -59,21 +64,47 @@ public class ExcelComService
     /// </summary>
     public Excel.Workbook? GetWorkbook(string filePath)
     {
-        var excel = GetExcelApplication();
-        if (excel == null) return null;
+        Excel.Application? excel = null;
+        Excel.Workbook? wb = null;
+        Excel.Workbook? result = null;
 
-        var normalizedPath = Path.GetFullPath(filePath);
-
-        foreach (Excel.Workbook wb in excel.Workbooks)
+        try
         {
-            if (string.Equals(wb.FullName, normalizedPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return wb;
-            }
-        }
+            excel = GetExcelApplication();
+            if (excel == null) return null;
 
-        _logger.LogWarning("Workbook not found: {Path}", filePath);
-        return null;
+            var normalizedPath = Path.GetFullPath(filePath);
+
+            foreach (Excel.Workbook workbook in excel.Workbooks)
+            {
+                wb = workbook;
+                try
+                {
+                    if (string.Equals(wb.FullName, normalizedPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        result = wb;
+                        wb = null; // Don't release the workbook we're returning
+                        return result;
+                    }
+                }
+                finally
+                {
+                    // Release workbook if it's not the one we're returning
+                    if (wb != null && wb != result)
+                    {
+                        ReleaseComObject(wb);
+                        wb = null;
+                    }
+                }
+            }
+
+            _logger.LogWarning("Workbook not found: {Path}", filePath);
+            return null;
+        }
+        finally
+        {
+            ReleaseComObject(excel);
+        }
     }
 
     /// <summary>
@@ -82,16 +113,34 @@ public class ExcelComService
     public List<string> ListOpenWorkbooks()
     {
         var result = new List<string>();
-        var excel = GetExcelApplication();
+        Excel.Application? excel = null;
+        Excel.Workbook? wb = null;
 
-        if (excel == null) return result;
-
-        foreach (Excel.Workbook wb in excel.Workbooks)
+        try
         {
-            result.Add(wb.FullName);
-        }
+            excel = GetExcelApplication();
+            if (excel == null) return result;
 
-        return result;
+            foreach (Excel.Workbook workbook in excel.Workbooks)
+            {
+                wb = workbook;
+                try
+                {
+                    result.Add(wb.FullName);
+                }
+                finally
+                {
+                    ReleaseComObject(wb);
+                    wb = null;
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            ReleaseComObject(excel);
+        }
     }
 
     /// <summary>
@@ -100,32 +149,54 @@ public class ExcelComService
     public List<ModuleInfo> ListModules(string filePath)
     {
         var result = new List<ModuleInfo>();
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
+            workbook = GetWorkbook(filePath);
 
-            foreach (VBIDE.VBComponent component in vbProject.VBComponents)
+            if (workbook == null)
             {
-                var moduleInfo = new ModuleInfo
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
+
+            foreach (VBIDE.VBComponent comp in vbProject.VBComponents)
+            {
+                component = comp;
+                try
                 {
-                    Name = component.Name,
-                    Type = GetModuleTypeName(component.Type),
-                    LineCount = component.CodeModule.CountOfLines,
-                    ProcedureCount = CountProcedures(component.CodeModule)
-                };
-                result.Add(moduleInfo);
+                    codeModule = component.CodeModule;
+                    var moduleInfo = new ModuleInfo
+                    {
+                        Name = component.Name,
+                        Type = GetModuleTypeName(component.Type),
+                        LineCount = codeModule.CountOfLines,
+                        ProcedureCount = CountProcedures(codeModule)
+                    };
+                    result.Add(moduleInfo);
+                }
+                finally
+                {
+                    ReleaseComObject(codeModule);
+                    ReleaseComObject(component);
+                    codeModule = null;
+                    component = null;
+                }
             }
         }
         catch (COMException ex) when (ex.Message.Contains("programmatic access"))
         {
             throw VbaAccessException.CreateTrustCenterError(filePath);
+        }
+        finally
+        {
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
         }
 
         return result;
@@ -136,18 +207,23 @@ public class ExcelComService
     /// </summary>
     public string ReadModule(string filePath, string moduleName)
     {
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
-            var component = vbProject.VBComponents.Item(moduleName);
-            var codeModule = component.CodeModule;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
+            component = vbProject.VBComponents.Item(moduleName);
+            codeModule = component.CodeModule;
 
             if (codeModule.CountOfLines == 0)
             {
@@ -164,6 +240,13 @@ public class ExcelComService
         {
             throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
     /// <summary>
@@ -171,18 +254,23 @@ public class ExcelComService
     /// </summary>
     public void WriteModule(string filePath, string moduleName, string code)
     {
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
-            var component = vbProject.VBComponents.Item(moduleName);
-            var codeModule = component.CodeModule;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
+            component = vbProject.VBComponents.Item(moduleName);
+            codeModule = component.CodeModule;
 
             // Delete existing code
             if (codeModule.CountOfLines > 0)
@@ -206,6 +294,13 @@ public class ExcelComService
         {
             throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
     /// <summary>
@@ -213,18 +308,22 @@ public class ExcelComService
     /// </summary>
     public void CreateModule(string filePath, string moduleName, VbaModuleType moduleType)
     {
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
             var componentType = (VBIDE.vbext_ComponentType)moduleType;
-            var component = vbProject.VBComponents.Add(componentType);
+            component = vbProject.VBComponents.Add(componentType);
             component.Name = moduleName;
 
             _logger.LogInformation("Module {Module} created in {File}", moduleName, filePath);
@@ -233,6 +332,12 @@ public class ExcelComService
         {
             throw VbaAccessException.CreateTrustCenterError(filePath);
         }
+        finally
+        {
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
     /// <summary>
@@ -240,17 +345,21 @@ public class ExcelComService
     /// </summary>
     public void DeleteModule(string filePath, string moduleName)
     {
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
-            var component = vbProject.VBComponents.Item(moduleName);
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
+            component = vbProject.VBComponents.Item(moduleName);
 
             // Cannot delete document modules
             if (component.Type == VBIDE.vbext_ComponentType.vbext_ct_Document)
@@ -270,6 +379,12 @@ public class ExcelComService
         {
             throw new ModuleNotFoundException(moduleName, ex, filePath);
         }
+        finally
+        {
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
     /// <summary>
@@ -277,17 +392,21 @@ public class ExcelComService
     /// </summary>
     public void ExportModule(string filePath, string moduleName, string outputPath)
     {
-        var workbook = GetWorkbook(filePath);
-
-        if (workbook == null)
-        {
-            throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
-        }
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
 
         try
         {
-            var vbProject = workbook.VBProject;
-            var component = vbProject.VBComponents.Item(moduleName);
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new FileNotFoundException($"Workbook not found or not open: {filePath}");
+            }
+
+            vbProject = workbook.VBProject;
+            component = vbProject.VBComponents.Item(moduleName);
             component.Export(outputPath);
 
             _logger.LogInformation("Module {Module} exported to {Output}", moduleName, outputPath);
@@ -299,6 +418,12 @@ public class ExcelComService
         catch (COMException ex) when (ComErrorCodes.IsNotFoundError(ex.HResult) || ex.Message.Contains("Subscript out of range"))
         {
             throw new ModuleNotFoundException(moduleName, ex, filePath);
+        }
+        finally
+        {
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
         }
     }
 
@@ -344,18 +469,28 @@ public class ExcelComService
     /// </summary>
     public List<ProcedureInfo> ListProcedures(string filePath, string moduleName)
     {
-        var workbook = GetWorkbook(filePath);
         var procedures = new List<ProcedureInfo>();
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook!.VBProject;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            vbProject = workbook.VBProject;
             if (vbProject == null)
             {
                 throw new VbaProjectAccessDeniedException(filePath);
             }
 
-            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+            component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
                 .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
             if (component == null)
@@ -363,7 +498,7 @@ public class ExcelComService
                 throw new ModuleNotFoundException(filePath, moduleName);
             }
 
-            var codeModule = component.CodeModule;
+            codeModule = component.CodeModule;
             var lineCount = codeModule.CountOfLines;
 
             if (lineCount == 0)
@@ -385,14 +520,19 @@ public class ExcelComService
 
                         var startLine = codeModule.get_ProcStartLine(procName, procKind);
                         var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
-                        var procType = GetProcedureTypeName(procKind);
 
-                        // Get access modifier by analyzing the first line of the procedure
+                        // Get access modifier and procedure type by analyzing the first line of the procedure
                         string? accessModifier = null;
+                        string procType;
                         if (startLine > 0 && startLine <= lineCount)
                         {
                             var firstLine = codeModule.Lines[startLine, 1].Trim();
                             accessModifier = GetAccessModifier(firstLine);
+                            procType = GetProcedureTypeName(procKind, firstLine);
+                        }
+                        else
+                        {
+                            procType = GetProcedureTypeName(procKind);
                         }
 
                         var procedureInfo = new ProcedureInfo
@@ -430,6 +570,13 @@ public class ExcelComService
             _logger.LogError(ex, "Error listing procedures in module {Module} from {Path}", moduleName, filePath);
             throw new VbaOperationException($"Failed to list procedures in module '{moduleName}': {ex.Message}", ex);
         }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
 
         return procedures;
     }
@@ -439,17 +586,27 @@ public class ExcelComService
     /// </summary>
     public string ReadProcedure(string filePath, string moduleName, string procedureName)
     {
-        var workbook = GetWorkbook(filePath);
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook!.VBProject;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            vbProject = workbook.VBProject;
             if (vbProject == null)
             {
                 throw new VbaProjectAccessDeniedException(filePath);
             }
 
-            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+            component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
                 .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
             if (component == null)
@@ -457,7 +614,7 @@ public class ExcelComService
                 throw new ModuleNotFoundException(filePath, moduleName);
             }
 
-            var codeModule = component.CodeModule;
+            codeModule = component.CodeModule;
             var lineCount = codeModule.CountOfLines;
 
             if (lineCount == 0)
@@ -510,6 +667,13 @@ public class ExcelComService
                 procedureName, moduleName, filePath);
             throw new VbaOperationException($"Failed to read procedure '{procedureName}': {ex.Message}", ex);
         }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
     /// <summary>
@@ -517,17 +681,27 @@ public class ExcelComService
     /// </summary>
     public void WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
     {
-        var workbook = GetWorkbook(filePath);
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
 
         try
         {
-            var vbProject = workbook!.VBProject;
+            workbook = GetWorkbook(filePath);
+
+            if (workbook == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            vbProject = workbook.VBProject;
             if (vbProject == null)
             {
                 throw new VbaProjectAccessDeniedException(filePath);
             }
 
-            var component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+            component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
                 .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
             if (component == null)
@@ -535,7 +709,7 @@ public class ExcelComService
                 throw new ModuleNotFoundException(filePath, moduleName);
             }
 
-            var codeModule = component.CodeModule;
+            codeModule = component.CodeModule;
             var lineCount = codeModule.CountOfLines;
 
             if (lineCount == 0)
@@ -600,10 +774,30 @@ public class ExcelComService
                 procedureName, moduleName, filePath);
             throw new VbaOperationException($"Failed to write procedure '{procedureName}': {ex.Message}", ex);
         }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
     }
 
-    private string GetProcedureTypeName(VBIDE.vbext_ProcKind procKind)
+    private string GetProcedureTypeName(VBIDE.vbext_ProcKind procKind, string? firstLine = null)
     {
+        // For regular procedures (Sub/Function), parse the first line to determine the exact type
+        if (procKind == VBIDE.vbext_ProcKind.vbext_pk_Proc && !string.IsNullOrWhiteSpace(firstLine))
+        {
+            // Normalize the line: add spaces at boundaries and convert to lowercase
+            var normalized = " " + firstLine.ToLowerInvariant().Replace("\t", " ").Trim() + " ";
+
+            if (normalized.Contains(" function "))
+                return "Function";
+            if (normalized.Contains(" sub "))
+                return "Sub";
+        }
+
+        // Fallback to original logic
         return procKind switch
         {
             VBIDE.vbext_ProcKind.vbext_pk_Proc => "Sub/Function",
@@ -627,5 +821,23 @@ public class ExcelComService
 
         // Default to Public if not specified
         return "Public";
+    }
+
+    /// <summary>
+    /// Release COM object
+    /// </summary>
+    private void ReleaseComObject(object? comObject)
+    {
+        if (comObject != null)
+        {
+            try
+            {
+                Marshal.ReleaseComObject(comObject);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to release COM object");
+            }
+        }
     }
 }

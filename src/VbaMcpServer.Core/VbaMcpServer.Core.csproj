@@ -48,6 +48,12 @@
       <HintPath Condition="'$(VbeInteropPath)' != ''">$(VbeInteropPath)</HintPath>
       <Private>true</Private>
     </Reference>
+    <!-- Reference to DAO Interop for Access data operations -->
+    <Reference Include="Microsoft.Office.Interop.Access.Dao">
+      <HintPath>C:\Windows\assembly\GAC_MSIL\Microsoft.Office.Interop.Access.Dao\15.0.0.0__71e9bce111e9429c\Microsoft.Office.Interop.Access.Dao.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

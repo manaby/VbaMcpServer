@@ -164,6 +164,16 @@ Once configured, you can ask Claude to:
 - "Add error handling to the btnSave_Click procedure in Form_MainForm"
 - "Create a new class module called DatabaseConnection in the Access database"
 
+### Access Data Examples
+
+- "List all tables in C:\Projects\MyDatabase.accdb"
+- "Show me the structure of the Customers table"
+- "Get the first 50 records from the Orders table where OrderDate > #2024-01-01#"
+- "List all queries in the database"
+- "Show me the SQL for the qryMonthlyReport query"
+- "Execute the qryActiveCustomers query and format as CSV"
+- "Create a new query called qryRecentOrders with SQL: SELECT * FROM Orders WHERE OrderDate > Date()-30"
+
 ## Office Security Settings
 
 ⚠️ **Required Setting**: You must enable VBA project access in Office:
@@ -207,6 +217,43 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed instructions.
 | `read_access_vba_procedure` | Read a specific procedure from Access |
 | `write_access_vba_procedure` | Write/replace a procedure in Access |
 | `export_access_vba_module` | Export Access module to file |
+
+### Access Data Tools
+
+#### Table and Query Operations
+
+| Tool | Description |
+|------|-------------|
+| `list_access_tables` | List all tables in an Access database |
+| `get_access_table_structure` | Get field definitions for a table |
+| `get_access_table_data` | Query table data with WHERE clause support |
+| `list_access_queries` | List all saved queries in the database |
+| `get_access_query_sql` | Get SQL text of a saved query |
+| `execute_access_query` | Execute a saved query and return results (supports parameters) |
+| `save_access_query` | Create or update a saved query |
+| `delete_access_query` | Delete a saved query |
+
+#### Relationship and Index Information
+
+| Tool | Description |
+|------|-------------|
+| `list_access_relationships` | List all relationships between tables |
+| `get_access_table_indexes` | Get all indexes for a specific table |
+
+#### Database Information
+
+| Tool | Description |
+|------|-------------|
+| `get_access_database_info` | Get summary information (file size, table count, query count, etc.) |
+| `list_access_forms` | List all forms in the database |
+| `list_access_reports` | List all reports in the database |
+
+#### Data Export
+
+| Tool | Description |
+|------|-------------|
+| `export_access_table_to_csv` | Export table data to a CSV file |
+| `export_access_query_to_csv` | Export query results to a CSV file |
 
 **Important Notes:**
 - Excel tools work with `.xlsm`, `.xlsb`, `.xls` files
@@ -429,6 +476,16 @@ Claude Code(CLI ツール)の場合:
 - 「Form_MainForm の btnSave_Click プロシージャにエラーハンドリングを追加して」
 - 「DatabaseConnection という新しいクラスモジュールを Access データベースに作成して」
 
+### Access データの例
+
+- 「C:\Projects\MyDatabase.accdb の全テーブルを一覧表示して」
+- 「Customers テーブルの構造を見せて」
+- 「Orders テーブルから OrderDate > #2024-01-01# の条件で最初の50件を取得して」
+- 「データベース内の全クエリを一覧表示して」
+- 「qryMonthlyReport クエリの SQL を見せて」
+- 「qryActiveCustomers クエリを実行して CSV 形式で返して」
+- 「SELECT * FROM Orders WHERE OrderDate > Date()-30 という SQL で qryRecentOrders という新しいクエリを作成して」
+
 ## Office セキュリティ設定
 
 ⚠️ **必須設定**: Office で VBA プロジェクトへのアクセスを有効にする必要があります：
@@ -472,6 +529,43 @@ Claude Code(CLI ツール)の場合:
 | `read_access_vba_procedure` | Access から特定のプロシージャを読み取り |
 | `write_access_vba_procedure` | Access でプロシージャを書き込み/置換 |
 | `export_access_vba_module` | Access モジュールをファイルにエクスポート |
+
+### Access データツール
+
+#### テーブル・クエリ操作
+
+| ツール | 説明 |
+|--------|------|
+| `list_access_tables` | Access データベース内のすべてのテーブルを一覧表示 |
+| `get_access_table_structure` | テーブルのフィールド定義を取得 |
+| `get_access_table_data` | WHERE句対応でテーブルデータを取得 |
+| `list_access_queries` | データベース内のすべての保存済みクエリを一覧表示 |
+| `get_access_query_sql` | 保存済みクエリのSQL文を取得 |
+| `execute_access_query` | 保存済みクエリを実行して結果を返す（パラメータ対応） |
+| `save_access_query` | 保存済みクエリを作成または更新 |
+| `delete_access_query` | 保存済みクエリを削除 |
+
+#### リレーションシップ・インデックス情報
+
+| ツール | 説明 |
+|--------|------|
+| `list_access_relationships` | テーブル間のすべてのリレーションシップを一覧表示 |
+| `get_access_table_indexes` | 特定のテーブルのすべてのインデックスを取得 |
+
+#### データベース情報
+
+| ツール | 説明 |
+|--------|------|
+| `get_access_database_info` | サマリー情報を取得（ファイルサイズ、テーブル数、クエリ数など） |
+| `list_access_forms` | データベース内のすべてのフォームを一覧表示 |
+| `list_access_reports` | データベース内のすべてのレポートを一覧表示 |
+
+#### データエクスポート
+
+| ツール | 説明 |
+|--------|------|
+| `export_access_table_to_csv` | テーブルデータをCSVファイルにエクスポート |
+| `export_access_query_to_csv` | クエリ結果をCSVファイルにエクスポート |
 
 **重要事項:**
 - Excel ツールは `.xlsm`, `.xlsb`, `.xls` ファイルに対応
