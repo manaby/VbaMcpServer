@@ -381,8 +381,8 @@ public partial class MainForm : Form
         using var dialog = new OpenFileDialog
         {
             Title = "Select VBA File",
-            Filter = "VBA Files|*.xlsm;*.xlsx;*.xlsb;*.xls;*.accdb;*.mdb|" +
-                     "Excel Files|*.xlsm;*.xlsx;*.xlsb;*.xls|" +
+            Filter = "VBA Files|*.xlsm;*.xlsb;*.xls;*.accdb;*.mdb|" +
+                     "Excel Macro Files|*.xlsm;*.xlsb;*.xls|" +
                      "Access Files|*.accdb;*.mdb|" +
                      "All Files|*.*",
             CheckFileExists = true

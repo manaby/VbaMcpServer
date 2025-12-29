@@ -149,11 +149,20 @@ Configuration file location:
 
 Once configured, you can ask Claude to:
 
+### Excel Examples
+
 - "List all VBA modules in C:\Projects\MyWorkbook.xlsm"
 - "Show me the code in Module1"
 - "Add error handling to the SaveData procedure"
 - "Create a new class module called DataProcessor"
 - "Refactor this code to use early binding"
+
+### Access Examples
+
+- "List all VBA modules in C:\Projects\MyDatabase.accdb"
+- "Show me the code in the Form_MainForm module"
+- "Add error handling to the btnSave_Click procedure in Form_MainForm"
+- "Create a new class module called DatabaseConnection in the Access database"
 
 ## Office Security Settings
 
@@ -169,18 +178,59 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed instructions.
 
 ## Available Tools
 
+### Excel VBA Tools
+
 | Tool | Description |
 |------|-------------|
-| `list_open_files` | List currently open Office files |
-| `list_modules` | List all VBA modules in a file |
-| `read_module` | Read entire module code |
-| `write_module` | Write/replace module code |
-| `create_module` | Create a new module |
-| `delete_module` | Delete a module |
-| `list_procedures` | List procedures in a module |
-| `read_procedure` | Read a specific procedure |
-| `export_module` | Export module to file |
-| `import_module` | Import module from file |
+| `list_open_excel_files` | List currently open Excel workbooks |
+| `list_excel_vba_modules` | List all VBA modules in an Excel workbook |
+| `read_excel_vba_module` | Read entire module code from Excel |
+| `write_excel_vba_module` | Write/replace module code in Excel |
+| `create_excel_vba_module` | Create a new module in Excel |
+| `delete_excel_vba_module` | Delete a module from Excel |
+| `list_excel_vba_procedures` | List procedures in an Excel module |
+| `read_excel_vba_procedure` | Read a specific procedure from Excel |
+| `write_excel_vba_procedure` | Write/replace a procedure in Excel |
+| `export_excel_vba_module` | Export Excel module to file |
+
+### Access VBA Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_open_access_files` | List currently open Access databases |
+| `list_access_vba_modules` | List all VBA modules in an Access database |
+| `read_access_vba_module` | Read entire module code from Access |
+| `write_access_vba_module` | Write/replace module code in Access |
+| `create_access_vba_module` | Create a new module in Access |
+| `delete_access_vba_module` | Delete a module from Access |
+| `list_access_vba_procedures` | List procedures in an Access module |
+| `read_access_vba_procedure` | Read a specific procedure from Access |
+| `write_access_vba_procedure` | Write/replace a procedure in Access |
+| `export_access_vba_module` | Export Access module to file |
+
+**Important Notes:**
+- Excel tools work with `.xlsm`, `.xlsb`, `.xls` files
+- Access tools work with `.accdb`, `.mdb` files
+- All files must be open in their respective Office applications before using these tools
+- Access module names may include prefixes like `Form_MainForm` or `Report_Report1` for code-behind modules
+
+## Breaking Changes in v0.4.0
+
+Excel VBA tool names have been updated to include the `excel` prefix for consistency with Access tools:
+
+| Old Name (v0.3.x) | New Name (v0.4.0+) |
+|-------------------|---------------------|
+| `list_vba_modules` | `list_excel_vba_modules` |
+| `read_vba_module` | `read_excel_vba_module` |
+| `write_vba_module` | `write_excel_vba_module` |
+| `create_vba_module` | `create_excel_vba_module` |
+| `delete_vba_module` | `delete_excel_vba_module` |
+| `export_vba_module` | `export_excel_vba_module` |
+| `list_vba_procedures` | `list_excel_vba_procedures` |
+| `read_vba_procedure` | `read_excel_vba_procedure` |
+| `write_vba_procedure` | `write_excel_vba_procedure` |
+
+**Action Required**: If you have existing scripts or workflows using the old tool names, please update them to use the new names.
 
 ## Building from Source
 
@@ -364,11 +414,20 @@ Claude Code(CLI ツール)の場合:
 
 設定後、Claude に以下のように依頼できます：
 
+### Excel の例
+
 - 「C:\Projects\MyWorkbook.xlsm の VBA モジュール一覧を表示して」
 - 「Module1 のコードを見せて」
 - 「SaveData プロシージャにエラーハンドリングを追加して」
 - 「DataProcessor という新しいクラスモジュールを作成して」
 - 「このコードを事前バインディングを使うようにリファクタリングして」
+
+### Access の例
+
+- 「C:\Projects\MyDatabase.accdb の VBA モジュール一覧を表示して」
+- 「Form_MainForm モジュールのコードを見せて」
+- 「Form_MainForm の btnSave_Click プロシージャにエラーハンドリングを追加して」
+- 「DatabaseConnection という新しいクラスモジュールを Access データベースに作成して」
 
 ## Office セキュリティ設定
 
@@ -381,6 +440,62 @@ Claude Code(CLI ツール)の場合:
 5. ✅ **VBA プロジェクト オブジェクト モデルへのアクセスを信頼する** にチェック
 
 詳細は [docs/SECURITY.md](docs/SECURITY.md) を参照してください。
+
+## 利用可能なツール
+
+### Excel VBA ツール
+
+| ツール | 説明 |
+|--------|------|
+| `list_open_excel_files` | 開いている Excel ワークブックを一覧表示 |
+| `list_excel_vba_modules` | Excel ワークブック内のすべての VBA モジュールを一覧表示 |
+| `read_excel_vba_module` | Excel からモジュール全体のコードを読み取り |
+| `write_excel_vba_module` | Excel でモジュールコードを書き込み/置換 |
+| `create_excel_vba_module` | Excel で新しいモジュールを作成 |
+| `delete_excel_vba_module` | Excel からモジュールを削除 |
+| `list_excel_vba_procedures` | Excel モジュール内のプロシージャを一覧表示 |
+| `read_excel_vba_procedure` | Excel から特定のプロシージャを読み取り |
+| `write_excel_vba_procedure` | Excel でプロシージャを書き込み/置換 |
+| `export_excel_vba_module` | Excel モジュールをファイルにエクスポート |
+
+### Access VBA ツール
+
+| ツール | 説明 |
+|--------|------|
+| `list_open_access_files` | 開いている Access データベースを一覧表示 |
+| `list_access_vba_modules` | Access データベース内のすべての VBA モジュールを一覧表示 |
+| `read_access_vba_module` | Access からモジュール全体のコードを読み取り |
+| `write_access_vba_module` | Access でモジュールコードを書き込み/置換 |
+| `create_access_vba_module` | Access で新しいモジュールを作成 |
+| `delete_access_vba_module` | Access からモジュールを削除 |
+| `list_access_vba_procedures` | Access モジュール内のプロシージャを一覧表示 |
+| `read_access_vba_procedure` | Access から特定のプロシージャを読み取り |
+| `write_access_vba_procedure` | Access でプロシージャを書き込み/置換 |
+| `export_access_vba_module` | Access モジュールをファイルにエクスポート |
+
+**重要事項:**
+- Excel ツールは `.xlsm`, `.xlsb`, `.xls` ファイルに対応
+- Access ツールは `.accdb`, `.mdb` ファイルに対応
+- すべてのファイルは各 Office アプリケーションで開いている必要があります
+- Access モジュール名には `Form_MainForm` や `Report_Report1` のようなプレフィックスが含まれる場合があります
+
+## v0.4.0 の破壊的変更
+
+Excel VBA ツール名が Access ツールとの一貫性のために `excel` プレフィックスを含むように更新されました：
+
+| 旧名前 (v0.3.x) | 新名前 (v0.4.0+) |
+|-----------------|------------------|
+| `list_vba_modules` | `list_excel_vba_modules` |
+| `read_vba_module` | `read_excel_vba_module` |
+| `write_vba_module` | `write_excel_vba_module` |
+| `create_vba_module` | `create_excel_vba_module` |
+| `delete_vba_module` | `delete_excel_vba_module` |
+| `export_vba_module` | `export_excel_vba_module` |
+| `list_vba_procedures` | `list_excel_vba_procedures` |
+| `read_vba_procedure` | `read_excel_vba_procedure` |
+| `write_vba_procedure` | `write_excel_vba_procedure` |
+
+**対応が必要**: 既存のスクリプトやワークフローで旧ツール名を使用している場合は、新しい名前に更新してください。
 
 ## ライセンス
 

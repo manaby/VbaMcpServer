@@ -153,6 +153,38 @@ Logs are stored in user profile directory:
 Log rotation: Daily
 Log format: JSON (Compact JSON format via Serilog)
 
+## Understanding Tool Names
+
+The VBA MCP Server provides separate sets of tools for Excel and Access:
+
+### Excel Tools
+- Prefix: `list_open_excel_files`, `list_excel_vba_modules`, `read_excel_vba_module`, etc.
+- Work with: `.xlsm`, `.xlsb`, `.xls`, `.xltm` files
+- File must be open in Excel
+
+### Access Tools
+- Prefix: `list_open_access_files`, `list_access_vba_modules`, `read_access_vba_module`, etc.
+- Work with: `.accdb`, `.mdb` files
+- File must be open in Access
+
+### Common Mistakes
+1. **Using Excel tools on Access files**: Tools like `list_excel_vba_modules` only work with Excel. For Access, use `list_access_vba_modules`.
+2. **File not open**: Both Excel and Access files must be open in their respective applications before using these tools.
+3. **Wrong module name format**: Access module names for Forms/Reports include prefixes (e.g., `Form_MainForm`, `Report_SalesReport`).
+
+### Quick Reference
+
+| Task | Excel Tool | Access Tool |
+|------|------------|-------------|
+| List open files | `list_open_excel_files` | `list_open_access_files` |
+| List modules | `list_excel_vba_modules` | `list_access_vba_modules` |
+| Read module | `read_excel_vba_module` | `read_access_vba_module` |
+| Write module | `write_excel_vba_module` | `write_access_vba_module` |
+| Create module | `create_excel_vba_module` | `create_access_vba_module` |
+| Delete module | `delete_excel_vba_module` | `delete_access_vba_module` |
+
+For complete tool lists, see the [README.md](../README.md#available-tools).
+
 ---
 
 <a name="japanese"></a>
@@ -303,3 +335,35 @@ Claude Code CLI ツールとの統合:
 
 ログローテーション: 日次
 ログ形式: JSON（Serilog による Compact JSON 形式）
+
+## ツール名の理解
+
+VBA MCP Server は Excel と Access で別々のツールセットを提供します:
+
+### Excel ツール
+- プレフィックス: `list_open_excel_files`, `list_excel_vba_modules`, `read_excel_vba_module` など
+- 対応ファイル: `.xlsm`, `.xlsb`, `.xls`, `.xltm`
+- Excel でファイルを開く必要があります
+
+### Access ツール
+- プレフィックス: `list_open_access_files`, `list_access_vba_modules`, `read_access_vba_module` など
+- 対応ファイル: `.accdb`, `.mdb`
+- Access でファイルを開く必要があります
+
+### よくある間違い
+1. **Access ファイルに Excel ツールを使用**: `list_excel_vba_modules` は Excel 専用です。Access には `list_access_vba_modules` を使用してください
+2. **ファイルが開いていない**: Excel と Access のファイルは、それぞれのアプリケーションで開く必要があります
+3. **誤ったモジュール名形式**: Access のフォーム/レポートモジュール名にはプレフィックスが含まれます（例: `Form_MainForm`, `Report_SalesReport`）
+
+### クイックリファレンス
+
+| タスク | Excel ツール | Access ツール |
+|------|------------|-------------|
+| 開いているファイル一覧 | `list_open_excel_files` | `list_open_access_files` |
+| モジュール一覧 | `list_excel_vba_modules` | `list_access_vba_modules` |
+| モジュール読み取り | `read_excel_vba_module` | `read_access_vba_module` |
+| モジュール書き込み | `write_excel_vba_module` | `write_access_vba_module` |
+| モジュール作成 | `create_excel_vba_module` | `create_access_vba_module` |
+| モジュール削除 | `delete_excel_vba_module` | `delete_access_vba_module` |
+
+完全なツールリストは [README.md](../README.md#available-tools) を参照してください。

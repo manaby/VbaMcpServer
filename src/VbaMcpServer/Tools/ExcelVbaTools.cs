@@ -40,7 +40,7 @@ public class ExcelVbaTools
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    [McpServerTool(Name = "list_vba_modules")]
+    [McpServerTool(Name = "list_excel_vba_modules")]
     [Description("List all VBA modules in an Excel workbook. The workbook must be open in Excel.")]
     public string ListVbaModules(
         [Description("Full file path to the Excel workbook (e.g., C:\\Projects\\MyWorkbook.xlsm)")] 
@@ -69,7 +69,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "read_vba_module")]
+    [McpServerTool(Name = "read_excel_vba_module")]
     [Description("Read the complete VBA code from a module. The workbook must be open in Excel.")]
     public string ReadVbaModule(
         [Description("Full file path to the Excel workbook")] 
@@ -110,7 +110,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "write_vba_module")]
+    [McpServerTool(Name = "write_excel_vba_module")]
     [Description("Write VBA code to a module, replacing its entire content. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. The workbook must be open in Excel.")]
     public string WriteVbaModule(
         [Description("Full file path to the Excel workbook")]
@@ -149,7 +149,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "create_vba_module")]
+    [McpServerTool(Name = "create_excel_vba_module")]
     [Description("Create a new VBA module in an Excel workbook. The workbook must be open in Excel.")]
     public string CreateVbaModule(
         [Description("Full file path to the Excel workbook")] 
@@ -191,7 +191,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "delete_vba_module")]
+    [McpServerTool(Name = "delete_excel_vba_module")]
     [Description("Delete a VBA module from an Excel workbook. IMPORTANT: This operation is irreversible. Make sure to backup your file before using this tool. Cannot delete document modules (ThisWorkbook, Sheet modules).")]
     public string DeleteVbaModule(
         [Description("Full file path to the Excel workbook")]
@@ -231,7 +231,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "export_vba_module")]
+    [McpServerTool(Name = "export_excel_vba_module")]
     [Description("Export a VBA module to a file (.bas, .cls, or .frm)")]
     public string ExportVbaModule(
         [Description("Full file path to the Excel workbook")] 
@@ -269,7 +269,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "list_vba_procedures")]
+    [McpServerTool(Name = "list_excel_vba_procedures")]
     [Description("List all procedures in a VBA module with detailed metadata including name, type, line numbers, and access modifiers")]
     public string ListVbaProcedures(
         [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,
@@ -314,7 +314,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "read_vba_procedure")]
+    [McpServerTool(Name = "read_excel_vba_procedure")]
     [Description("Read the code of a specific procedure from a VBA module")]
     public string ReadVbaProcedure(
         [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,
@@ -358,7 +358,7 @@ public class ExcelVbaTools
         }
     }
 
-    [McpServerTool(Name = "write_vba_procedure")]
+    [McpServerTool(Name = "write_excel_vba_procedure")]
     [Description("Write or replace a specific procedure in a VBA module. IMPORTANT: This operation is irreversible. The procedure will be replaced with the new code.")]
     public string WriteVbaProcedure(
         [Description("Full file path to the Excel workbook (e.g., C:\\MyWorkbook.xlsm)")] string filePath,

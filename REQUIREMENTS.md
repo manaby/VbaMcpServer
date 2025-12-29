@@ -77,13 +77,23 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | ユーザーフォーム (.frm) | ✅ | ✅ | ✅ | ✅ | コードのみ、デザイン不可 |
 | ドキュメントモジュール | ✅ | ✅ | ❌ | ❌ | ThisWorkbook, Sheet 等 |
 
-### 3.2 Access VBA 操作機能（将来実装）
+### 3.2 Access VBA 操作機能 ✅ 完了
 
-| 機能 | 説明 | 優先度 |
-|------|------|--------|
-| データベース一覧取得 | 開いている Access データベースの一覧を取得 | 将来 |
-| モジュール操作 | Excel と同等の機能 | 将来 |
-| フォーム/レポートのコードビハインド | フォーム・レポートの VBA コード操作 | 将来 |
+| 機能 | 説明 | 優先度 | 状態 |
+|------|------|--------|------|
+| データベース一覧取得 | 開いている Access データベースの一覧を取得 | 必須 | ✅ 実装済み |
+| モジュール操作 | Excel と同等の機能（読み取り、書き込み、作成、削除） | 必須 | ✅ 実装済み |
+| フォーム/レポートのコードビハインド | フォーム・レポートの VBA コード操作 | 必須 | ✅ 実装済み |
+| プロシージャ単位の操作 | 個別プロシージャの読み書き | 任意 | ✅ 実装済み |
+| モジュールエクスポート | モジュールをファイルに出力 | 任意 | ✅ 実装済み |
+
+#### 3.2.1 対応モジュールタイプ
+| タイプ | 読み取り | 書き込み | 作成 | 削除 | 備考 |
+|--------|:--------:|:--------:|:----:|:----:|------|
+| 標準モジュール (.bas) | ✅ | ✅ | ✅ | ✅ | 完全対応 |
+| クラスモジュール (.cls) | ✅ | ✅ | ✅ | ✅ | 完全対応 |
+| ユーザーフォーム (.frm) | ✅ | ✅ | ✅ | ✅ | コードのみ、デザイン不可 |
+| フォーム/レポート | ✅ | ✅ | ❌ | ❌ | コードビハインドのみ |
 
 ### 3.3 バージョン管理とバックアップ（ユーザー責任）
 
@@ -101,15 +111,35 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 
 ### 4.1 ツール一覧
 
+#### Excel VBA ツール
+
 | ツール名 | 説明 |
 |----------|------|
-| `ListOpenExcelFiles` | 開いている Excel ワークブック一覧を取得 |
-| `ListVbaModules` | 指定ワークブックの VBA モジュール一覧を取得 |
-| `ReadVbaModule` | モジュールの VBA コードを読み取り |
-| `WriteVbaModule` | モジュールに VBA コードを書き込み |
-| `CreateVbaModule` | 新規 VBA モジュールを作成 |
-| `DeleteVbaModule` | VBA モジュールを削除 |
-| `ExportVbaModule` | モジュールをファイルにエクスポート |
+| `list_open_excel_files` | 開いている Excel ワークブック一覧を取得 |
+| `list_excel_vba_modules` | 指定ワークブックの VBA モジュール一覧を取得 |
+| `read_excel_vba_module` | モジュールの VBA コードを読み取り |
+| `write_excel_vba_module` | モジュールに VBA コードを書き込み |
+| `create_excel_vba_module` | 新規 VBA モジュールを作成 |
+| `delete_excel_vba_module` | VBA モジュールを削除 |
+| `list_excel_vba_procedures` | モジュール内のプロシージャ一覧を取得 |
+| `read_excel_vba_procedure` | 特定プロシージャを読み取り |
+| `write_excel_vba_procedure` | プロシージャを書き込み/置換 |
+| `export_excel_vba_module` | モジュールをファイルにエクスポート |
+
+#### Access VBA ツール
+
+| ツール名 | 説明 |
+|----------|------|
+| `list_open_access_files` | 開いている Access データベース一覧を取得 |
+| `list_access_vba_modules` | 指定データベースの VBA モジュール一覧を取得 |
+| `read_access_vba_module` | Access モジュールの VBA コードを読み取り |
+| `write_access_vba_module` | Access モジュールに VBA コードを書き込み |
+| `create_access_vba_module` | 新規 VBA モジュールを Access に作成 |
+| `delete_access_vba_module` | Access の VBA モジュールを削除 |
+| `list_access_vba_procedures` | Access モジュール内のプロシージャ一覧を取得 |
+| `read_access_vba_procedure` | Access の特定プロシージャを読み取り |
+| `write_access_vba_procedure` | Access のプロシージャを書き込み/置換 |
+| `export_access_vba_module` | Access モジュールをファイルにエクスポート |
 
 ### 4.2 ツール詳細
 
@@ -314,9 +344,12 @@ Excel/Access で以下の設定を有効にする必要があります：
 - [x] GUI管理アプリケーション (WinForms)
 - [x] MSIインストーラ (WiX Toolset)
 
-### Phase 3: Access 対応
-- [ ] Access COM 接続
-- [ ] フォーム/レポートのコードビハインド対応
+### Phase 3: Access 対応 ✅ 完了 (commit 730a07e - 2025-12-28)
+- [x] Access COM 接続 (AccessComService 実装)
+- [x] フォーム/レポートのコードビハインド対応
+- [x] モジュール CRUD 操作
+- [x] プロシージャ単位の操作
+- [x] AccessVbaTools 10ツール実装
 
 ### Phase 4: 拡張機能
 - [x] プロシージャ単位の操作
@@ -338,5 +371,7 @@ Excel/Access で以下の設定を有効にする必要があります：
 
 | バージョン | 日付 | 変更内容 |
 |------------|------|----------|
-| 0.1.0 | 2024-12-26 | 初版作成 |
+| 0.4.0 | 2025-12-29 | 破壊的変更: Excelツール名に`excel`プレフィックス追加、Access VBA対応ドキュメント追加 |
+| 0.3.0 | 2025-12-28 | Phase 3完了: Access VBA対応実装（AccessComService, AccessVbaTools 10ツール） |
 | 0.2.0 | 2025-12-26 | Phase 2完了: GUI管理アプリ追加、単体テスト追加、ログ強化、MSIインストーラ対応 |
+| 0.1.0 | 2024-12-26 | 初版作成 |

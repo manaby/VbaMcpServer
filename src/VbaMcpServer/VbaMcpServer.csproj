@@ -10,7 +10,7 @@
     <!-- Assembly Info -->
     <AssemblyName>VbaMcpServer</AssemblyName>
     <RootNamespace>VbaMcpServer</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.4.0</Version>
     <Authors>vba-mcp-server contributors</Authors>
     <Description>MCP server for reading and writing VBA code in Excel and Access</Description>
     <RepositoryUrl>https://github.com/YOUR_USERNAME/vba-mcp-server</RepositoryUrl>

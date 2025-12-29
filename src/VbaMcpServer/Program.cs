@@ -77,6 +77,20 @@ class Program
                 logger.LogWarning(ex, "Could not check Excel availability");
             }
 
+            // Check Access availability on startup
+            try
+            {
+                var accessService = app.Services.GetRequiredService<AccessComService>();
+                if (!accessService.IsAccessAvailable())
+                {
+                    logger.LogWarning("Access is not available or not running");
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not check Access availability");
+            }
+
             await app.RunAsync();
         }
         finally
