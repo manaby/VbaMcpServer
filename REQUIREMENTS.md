@@ -170,7 +170,9 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | `delete_excel_vba_module` | VBA モジュールを削除 |
 | `list_excel_vba_procedures` | モジュール内のプロシージャ一覧を取得 |
 | `read_excel_vba_procedure` | 特定プロシージャを読み取り |
-| `write_excel_vba_procedure` | プロシージャを書き込み/置換 |
+| `write_excel_vba_procedure` | プロシージャを書き込み/置換（upsert動作） |
+| `add_excel_vba_procedure` | 新規プロシージャを追加（既存時はエラー） |
+| `delete_excel_vba_procedure` | プロシージャを削除 |
 | `export_excel_vba_module` | モジュールをファイルにエクスポート |
 
 #### Access VBA ツール
@@ -185,7 +187,9 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | `delete_access_vba_module` | Access の VBA モジュールを削除 |
 | `list_access_vba_procedures` | Access モジュール内のプロシージャ一覧を取得 |
 | `read_access_vba_procedure` | Access の特定プロシージャを読み取り |
-| `write_access_vba_procedure` | Access のプロシージャを書き込み/置換 |
+| `write_access_vba_procedure` | Access のプロシージャを書き込み/置換（upsert動作） |
+| `add_access_vba_procedure` | 新規プロシージャを追加（既存時はエラー） |
+| `delete_access_vba_procedure` | プロシージャを削除 |
 | `export_access_vba_module` | Access モジュールをファイルにエクスポート |
 
 #### Access データツール
@@ -435,8 +439,10 @@ Excel/Access で以下の設定を有効にする必要があります：
 - [x] プロシージャ単位の操作
 - [x] AccessVbaTools 10ツール実装
 
-### Phase 4: 拡張機能
-- [x] プロシージャ単位の操作
+### Phase 4: 拡張機能 ✅ 完了 (commit xxxxx - 2025-12-29)
+- [x] プロシージャ単位の操作（upsert動作、add/delete対応）
+- [x] XMLエスケープ防御処理
+- [x] 改行コード正規化
 - [ ] 部分的なコード編集（行単位）
 - [ ] 参照設定の管理
 - [ ] VBA プロジェクトのインポート
@@ -455,6 +461,7 @@ Excel/Access で以下の設定を有効にする必要があります：
 
 | バージョン | 日付 | 変更内容 |
 |------------|------|----------|
+| 0.5.0 | 2025-12-29 | Phase 4完了: プロシージャ操作強化（upsert動作、add/delete対応）、XMLエスケープ防御、改行正規化 |
 | 0.4.0 | 2025-12-29 | 破壊的変更: Excelツール名に`excel`プレフィックス追加、Access VBA対応ドキュメント追加 |
 | 0.3.0 | 2025-12-28 | Phase 3完了: Access VBA対応実装（AccessComService, AccessVbaTools 10ツール） |
 | 0.2.0 | 2025-12-26 | Phase 2完了: GUI管理アプリ追加、単体テスト追加、ログ強化、MSIインストーラ対応 |

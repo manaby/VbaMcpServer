@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using VbaMcpServer.Exceptions;
+using VbaMcpServer.Helpers;
 using VbaMcpServer.Models;
 using VbaMcpServer.Services;
 
@@ -359,16 +360,16 @@ public class AccessVbaTools
     }
 
     [McpServerTool(Name = "write_access_vba_procedure")]
-    [Description("Write or replace a specific procedure in an Access VBA module. IMPORTANT: This operation is irreversible. The procedure will be replaced with the new code.")]
+    [Description("Write or add a procedure in an Access VBA module. If the procedure exists, it will be replaced. If it does not exist, it will be added to the end of the module. IMPORTANT: This operation is irreversible. Do NOT apply XML escaping to the code (use '&' not '&amp;', '<' not '&lt;').")]
     public string WriteAccessVbaProcedure(
         [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
         [Description("Name of the VBA module containing the procedure")] string moduleName,
         [Description("Name of the procedure to write/replace (Sub, Function, or Property)")] string procedureName,
-        [Description("The complete VBA code for the procedure, including the procedure declaration (Sub/Function/Property) and End statement")] string code)
+        [Description("The complete VBA code for the procedure, including the procedure declaration (Sub/Function/Property) and End statement. IMPORTANT: Do NOT apply XML escaping (use '&' not '&amp;', '<' not '&lt;', '>' not '&gt;')")] string code)
     {
         try
         {
-            _accessService.WriteProcedure(filePath, moduleName, procedureName, code);
+            var action = _accessService.WriteProcedure(filePath, moduleName, procedureName, code);
 
             var result = new
             {
@@ -376,8 +377,11 @@ public class AccessVbaTools
                 file = filePath,
                 module = moduleName,
                 procedure = procedureName,
+                action = action,
                 linesWritten = code.Split('\n').Length,
-                warning = "This operation is irreversible. The procedure has been replaced."
+                message = action == "replaced"
+                    ? "Procedure replaced successfully"
+                    : "Procedure added successfully"
             };
 
             return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
@@ -1030,6 +1034,104 @@ public class AccessVbaTools
         catch (Exception ex)
         {
             return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
+
+    #region VBA Procedure Add/Delete Tools
+
+    [McpServerTool(Name = "add_access_vba_procedure")]
+    [Description("Add a new procedure to an Access VBA module. If a procedure with the same name exists, an error will be returned. Use write_access_vba_procedure if you want to replace an existing procedure.")]
+    public string AddAccessVbaProcedure(
+        [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
+        [Description("Name of the VBA module to add the procedure to")] string moduleName,
+        [Description("The complete VBA code for the procedure, including the procedure declaration (Sub/Function/Property) and End statement. The procedure name will be extracted from the code. IMPORTANT: Do NOT apply XML escaping (use '&' not '&amp;', '<' not '&lt;', '>' not '&gt;')")] string code,
+        [Description("Insert the new procedure after this existing procedure (optional, default: append to end)")] string? insertAfter = null)
+    {
+        try
+        {
+            _accessService.AddProcedure(filePath, moduleName, code, insertAfter);
+
+            var procedureName = CodeNormalizer.ExtractProcedureName(code);
+
+            var result = new
+            {
+                success = true,
+                file = filePath,
+                module = moduleName,
+                procedure = procedureName,
+                insertedAfter = insertAfter,
+                linesWritten = code.Split('\n').Length,
+                message = "Procedure added successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (VbaProjectAccessDeniedException ex)
+        {
+            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Access's Trust Center settings.";
+        }
+        catch (ModuleNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error adding procedure: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "delete_access_vba_procedure")]
+    [Description("Delete a procedure from an Access VBA module. IMPORTANT: This operation is irreversible.")]
+    public string DeleteAccessVbaProcedure(
+        [Description("Full file path to the Access database (e.g., C:\\MyDatabase.accdb)")] string filePath,
+        [Description("Name of the VBA module containing the procedure")] string moduleName,
+        [Description("Name of the procedure to delete (Sub, Function, or Property)")] string procedureName)
+    {
+        try
+        {
+            _accessService.DeleteProcedure(filePath, moduleName, procedureName);
+
+            var result = new
+            {
+                success = true,
+                file = filePath,
+                module = moduleName,
+                procedure = procedureName,
+                deleted = true,
+                message = "Procedure deleted successfully"
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (VbaProjectAccessDeniedException ex)
+        {
+            return $"Error: {ex.Message}\n\nPlease enable 'Trust access to the VBA project object model' in Access's Trust Center settings.";
+        }
+        catch (ModuleNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error deleting procedure: {ex.Message}";
         }
     }
 

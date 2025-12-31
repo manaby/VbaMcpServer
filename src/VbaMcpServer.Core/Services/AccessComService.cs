@@ -23,14 +23,19 @@ public class AccessComService
     /// </summary>
     public bool IsAccessAvailable()
     {
+        Microsoft.Office.Interop.Access.Application? app = null;
         try
         {
-            var app = GetAccessApplication();
+            app = GetAccessApplication();
             return app != null;
         }
         catch
         {
             return false;
+        }
+        finally
+        {
+            ReleaseComObject(app);
         }
     }
 
@@ -64,26 +69,37 @@ public class AccessComService
     public List<string> ListOpenDatabases()
     {
         var databases = new List<string>();
-        var app = GetAccessApplication();
-
-        if (app == null)
-        {
-            _logger.LogWarning("Access is not running");
-            return databases;
-        }
+        Microsoft.Office.Interop.Access.Application? app = null;
+        dynamic? currentProject = null;
 
         try
         {
-            // In Access, only one database can be open at a time
-            if (app.CurrentProject != null && !string.IsNullOrEmpty(app.CurrentProject.FullName))
+            app = GetAccessApplication();
+
+            if (app == null)
             {
-                databases.Add(app.CurrentProject.FullName);
-                _logger.LogDebug("Found open database: {Path}", app.CurrentProject.FullName);
+                _logger.LogWarning("Access is not running");
+                return databases;
+            }
+
+            // In Access, only one database can be open at a time
+            // CRITICAL: Store CurrentProject in variable to release RCW
+            currentProject = app.CurrentProject;
+            if (currentProject != null && !string.IsNullOrEmpty(currentProject.FullName))
+            {
+                string fullName = currentProject.FullName;
+                databases.Add(fullName);
+                _logger.LogDebug("Found open database: {Path}", fullName);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error listing Access databases");
+        }
+        finally
+        {
+            ReleaseComObject(currentProject);
+            ReleaseComObject(app);
         }
 
         return databases;
@@ -101,7 +117,19 @@ public class AccessComService
         }
 
         // Check if the requested database is currently open
-        var currentDbPath = app.CurrentProject?.FullName;
+        // CRITICAL: Store CurrentProject in variable to release RCW
+        dynamic? currentProject = null;
+        string? currentDbPath = null;
+        try
+        {
+            currentProject = app.CurrentProject;
+            currentDbPath = currentProject?.FullName;
+        }
+        finally
+        {
+            ReleaseComObject(currentProject);
+        }
+
         if (string.IsNullOrEmpty(currentDbPath))
         {
             throw new FileNotFoundException($"No database is currently open in Access");
@@ -127,6 +155,7 @@ public class AccessComService
         var app = GetDatabase(filePath);
         var modules = new List<ModuleInfo>();
         Microsoft.Vbe.Interop.VBProject? vbProject = null;
+        Microsoft.Vbe.Interop.VBComponents? vbComponents = null;
         Microsoft.Vbe.Interop.VBComponent? component = null;
         Microsoft.Vbe.Interop.CodeModule? codeModule = null;
 
@@ -139,7 +168,8 @@ public class AccessComService
                 throw new VbaProjectAccessDeniedException(filePath);
             }
 
-            foreach (var comp in vbProject.VBComponents.Cast<Microsoft.Vbe.Interop.VBComponent>())
+            vbComponents = vbProject.VBComponents;
+            foreach (var comp in vbComponents.Cast<Microsoft.Vbe.Interop.VBComponent>())
             {
                 component = comp;
                 try
@@ -184,6 +214,7 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(vbComponents);
             ReleaseComObject(vbProject);
             ReleaseComObject(app);
         }
@@ -731,9 +762,241 @@ public class AccessComService
     }
 
     /// <summary>
-    /// Write/replace a specific procedure in a module
+    /// Write/replace a specific procedure in a module.
+    /// If the procedure does not exist, it will be added to the end of the module.
     /// </summary>
-    public void WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
+    /// <returns>"replaced" if existing procedure was replaced, "added" if new procedure was added</returns>
+    public string WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
+    {
+        var app = GetDatabase(filePath);
+        Microsoft.Vbe.Interop.VBProject? vbProject = null;
+        Microsoft.Vbe.Interop.VBComponent? component = null;
+        Microsoft.Vbe.Interop.CodeModule? codeModule = null;
+
+        try
+        {
+            // Preprocess code: unescape XML entities and normalize line endings
+            newCode = CodeNormalizer.PreprocessCode(newCode);
+
+            vbProject = app!.VBE.ActiveVBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            component = vbProject.VBComponents.Cast<Microsoft.Vbe.Interop.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            codeModule = component.CodeModule;
+            var lineCount = codeModule.CountOfLines;
+
+            // If module is empty, add the procedure
+            if (lineCount == 0)
+            {
+                if (!string.IsNullOrEmpty(newCode))
+                {
+                    codeModule.InsertLines(1, newCode);
+                }
+                _logger.LogInformation("Added procedure {Procedure} to empty module {Module} in {Path}",
+                    procedureName, moduleName, filePath);
+                return "added";
+            }
+
+            // Search for the procedure
+            bool found = false;
+            for (int line = 1; line <= lineCount; line++)
+            {
+                try
+                {
+                    var procName = codeModule.get_ProcOfLine(line, out Microsoft.Vbe.Interop.vbext_ProcKind procKind);
+                    if (!string.IsNullOrEmpty(procName) && procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                        var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+
+                        // Delete existing procedure
+                        codeModule.DeleteLines(startLine, procLineCount);
+
+                        // Insert new code at the same position
+                        if (!string.IsNullOrEmpty(newCode))
+                        {
+                            codeModule.InsertLines(startLine, newCode);
+                        }
+
+                        found = true;
+                        _logger.LogInformation("Replaced procedure {Procedure} in module {Module} in {Path}",
+                            procedureName, moduleName, filePath);
+                        break;
+                    }
+                }
+                catch
+                {
+                    // Continue searching
+                }
+            }
+
+            if (!found)
+            {
+                // Procedure not found, add it to the end of the module
+                var insertLine = codeModule.CountOfLines + 1;
+
+                // Add a blank line before the new procedure if module is not empty
+                if (codeModule.CountOfLines > 0)
+                {
+                    codeModule.InsertLines(insertLine, "");
+                    insertLine++;
+                }
+
+                if (!string.IsNullOrEmpty(newCode))
+                {
+                    codeModule.InsertLines(insertLine, newCode);
+                }
+
+                _logger.LogInformation("Added procedure {Procedure} to module {Module} in {Path}",
+                    procedureName, moduleName, filePath);
+                return "added";
+            }
+
+            return "replaced";
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error writing procedure {Procedure} to module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+            throw new VbaOperationException($"Failed to write procedure '{procedureName}': {ex.Message}", ex);
+        }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Add a new procedure to a module. If a procedure with the same name exists, throws an exception.
+    /// </summary>
+    /// <param name="insertAfter">Insert after this procedure (null = append to end)</param>
+    public void AddProcedure(string filePath, string moduleName, string code, string? insertAfter = null)
+    {
+        var app = GetDatabase(filePath);
+        Microsoft.Vbe.Interop.VBProject? vbProject = null;
+        Microsoft.Vbe.Interop.VBComponent? component = null;
+        Microsoft.Vbe.Interop.CodeModule? codeModule = null;
+
+        try
+        {
+            // Preprocess code
+            code = CodeNormalizer.PreprocessCode(code);
+
+            // Extract procedure name from code
+            string procedureName = CodeNormalizer.ExtractProcedureName(code);
+
+            vbProject = app!.VBE.ActiveVBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            component = vbProject.VBComponents.Cast<Microsoft.Vbe.Interop.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            codeModule = component.CodeModule;
+
+            // Check if procedure already exists
+            if (ProcedureExists(codeModule, procedureName))
+            {
+                throw new ArgumentException(
+                    $"Procedure '{procedureName}' already exists in module '{moduleName}'. " +
+                    "Use WriteProcedure to replace it, or use a different procedure name.");
+            }
+
+            // Determine insertion line
+            int insertLine;
+            if (!string.IsNullOrEmpty(insertAfter))
+            {
+                // Insert after specified procedure
+                insertLine = FindProcedureEndLine(codeModule, insertAfter);
+                if (insertLine == -1)
+                {
+                    throw new ArgumentException(
+                        $"Procedure '{insertAfter}' not found in module '{moduleName}'");
+                }
+                insertLine++; // Insert on the line after the procedure ends
+            }
+            else
+            {
+                // Append to end
+                insertLine = codeModule.CountOfLines + 1;
+            }
+
+            // Add blank line before the new procedure if not at the beginning
+            if (codeModule.CountOfLines > 0 && insertLine <= codeModule.CountOfLines)
+            {
+                codeModule.InsertLines(insertLine, "");
+                insertLine++;
+            }
+
+            // Insert the code
+            codeModule.InsertLines(insertLine, code);
+
+            _logger.LogInformation("Added procedure {Procedure} to module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding procedure to module {Module} in {Path}",
+                moduleName, filePath);
+            throw new VbaOperationException($"Failed to add procedure: {ex.Message}", ex);
+        }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Delete a procedure from a module
+    /// </summary>
+    public void DeleteProcedure(string filePath, string moduleName, string procedureName)
     {
         var app = GetDatabase(filePath);
         Microsoft.Vbe.Interop.VBProject? vbProject = null;
@@ -761,7 +1024,7 @@ public class AccessComService
 
             if (lineCount == 0)
             {
-                throw new ArgumentException($"Module '{moduleName}' is empty, procedure '{procedureName}' not found", nameof(procedureName));
+                throw new ArgumentException($"Module '{moduleName}' is empty");
             }
 
             // Search for the procedure
@@ -770,24 +1033,18 @@ public class AccessComService
                 try
                 {
                     var procName = codeModule.get_ProcOfLine(line, out Microsoft.Vbe.Interop.vbext_ProcKind procKind);
-                    if (!string.IsNullOrEmpty(procName) && procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+
+                    if (!string.IsNullOrEmpty(procName) &&
+                        procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
                     {
                         var startLine = codeModule.get_ProcStartLine(procName, procKind);
                         var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
 
-                        // Delete existing procedure
+                        // Delete the procedure
                         codeModule.DeleteLines(startLine, procLineCount);
 
-                        // Insert new code at the same position
-                        if (!string.IsNullOrEmpty(newCode))
-                        {
-                            codeModule.InsertLines(startLine, newCode);
-                        }
-
-                        var newLineCount = string.IsNullOrEmpty(newCode) ? 0 : newCode.Split('\n').Length;
-                        _logger.LogInformation("Wrote procedure {Procedure} to module {Module} in {Path}: {Lines} lines",
-                            procedureName, moduleName, filePath, newLineCount);
-
+                        _logger.LogInformation("Deleted procedure {Procedure} from module {Module} in {Path}",
+                            procedureName, moduleName, filePath);
                         return;
                     }
                 }
@@ -797,7 +1054,7 @@ public class AccessComService
                 }
             }
 
-            throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'", nameof(procedureName));
+            throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'");
         }
         catch (VbaProjectAccessDeniedException)
         {
@@ -813,9 +1070,9 @@ public class AccessComService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error writing procedure {Procedure} to module {Module} in {Path}",
+            _logger.LogError(ex, "Error deleting procedure {Procedure} from module {Module} in {Path}",
                 procedureName, moduleName, filePath);
-            throw new VbaOperationException($"Failed to write procedure '{procedureName}': {ex.Message}", ex);
+            throw new VbaOperationException($"Failed to delete procedure '{procedureName}': {ex.Message}", ex);
         }
         finally
         {
@@ -824,6 +1081,62 @@ public class AccessComService
             ReleaseComObject(vbProject);
             ReleaseComObject(app);
         }
+    }
+
+    /// <summary>
+    /// Check if a procedure exists in a code module
+    /// </summary>
+    private bool ProcedureExists(Microsoft.Vbe.Interop.CodeModule codeModule, string procedureName)
+    {
+        var lineCount = codeModule.CountOfLines;
+        if (lineCount == 0) return false;
+
+        for (int line = 1; line <= lineCount; line++)
+        {
+            try
+            {
+                var procName = codeModule.get_ProcOfLine(line, out Microsoft.Vbe.Interop.vbext_ProcKind _);
+                if (!string.IsNullOrEmpty(procName) &&
+                    procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Continue
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Find the end line of a procedure
+    /// </summary>
+    private int FindProcedureEndLine(Microsoft.Vbe.Interop.CodeModule codeModule, string procedureName)
+    {
+        var lineCount = codeModule.CountOfLines;
+        if (lineCount == 0) return -1;
+
+        for (int line = 1; line <= lineCount; line++)
+        {
+            try
+            {
+                var procName = codeModule.get_ProcOfLine(line, out Microsoft.Vbe.Interop.vbext_ProcKind procKind);
+                if (!string.IsNullOrEmpty(procName) &&
+                    procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                    var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+                    return startLine + procLineCount - 1;
+                }
+            }
+            catch
+            {
+                // Continue
+            }
+        }
+        return -1;
     }
 
     private string GetProcedureTypeName(Microsoft.Vbe.Interop.vbext_ProcKind procKind, string? firstLine = null)
@@ -870,6 +1183,7 @@ public class AccessComService
         var app = GetDatabase(filePath);
         var tables = new List<TableInfo>();
         dynamic? currentDb = null;
+        dynamic? tableDefs = null;
 
         try
         {
@@ -879,7 +1193,8 @@ public class AccessComService
                 throw new VbaOperationException("Failed to access database");
             }
 
-            foreach (var tableDef in currentDb.TableDefs)
+            tableDefs = currentDb.TableDefs;
+            foreach (var tableDef in tableDefs)
             {
                 try
                 {
@@ -938,7 +1253,9 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(tableDefs);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
 
         return tables;
@@ -953,6 +1270,9 @@ public class AccessComService
         var fields = new List<FieldInfo>();
         dynamic? currentDb = null;
         dynamic? tableDef = null;
+        dynamic? indexes = null;
+        dynamic? indexFields = null;
+        dynamic? tableFields = null;
 
         try
         {
@@ -975,14 +1295,18 @@ public class AccessComService
             var primaryKeyFields = new HashSet<string>();
             try
             {
-                foreach (var index in tableDef.Indexes)
+                indexes = tableDef.Indexes;
+                foreach (var index in indexes)
                 {
                     if (index.Primary)
                     {
-                        foreach (var field in index.Fields)
+                        indexFields = index.Fields;
+                        foreach (var field in indexFields)
                         {
                             primaryKeyFields.Add(field.Name);
                         }
+                        ReleaseComObject(indexFields);
+                        indexFields = null;
                     }
                 }
             }
@@ -992,7 +1316,8 @@ public class AccessComService
             }
 
             // Get field information
-            foreach (var field in tableDef.Fields)
+            tableFields = tableDef.Fields;
+            foreach (var field in tableFields)
             {
                 try
                 {
@@ -1063,8 +1388,12 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(tableFields);
+            ReleaseComObject(indexFields);
+            ReleaseComObject(indexes);
             ReleaseComObject(tableDef);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
 
         return fields;
@@ -1155,6 +1484,7 @@ public class AccessComService
         {
             ReleaseComObject(recordset);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1170,6 +1500,7 @@ public class AccessComService
         var app = GetDatabase(filePath);
         var queries = new List<QueryInfo>();
         dynamic? currentDb = null;
+        dynamic? queryDefs = null;
 
         try
         {
@@ -1179,7 +1510,8 @@ public class AccessComService
                 throw new VbaOperationException("Failed to access database");
             }
 
-            foreach (var queryDef in currentDb.QueryDefs)
+            queryDefs = currentDb.QueryDefs;
+            foreach (var queryDef in queryDefs)
             {
                 try
                 {
@@ -1228,7 +1560,9 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(queryDefs);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
 
         return queries;
@@ -1277,6 +1611,7 @@ public class AccessComService
         {
             ReleaseComObject(queryDef);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1299,6 +1634,7 @@ public class AccessComService
         var app = GetDatabase(filePath);
         dynamic? currentDb = null;
         dynamic? queryDef = null;
+        dynamic? queryParams = null;
         dynamic? recordset = null;
 
         try
@@ -1321,7 +1657,8 @@ public class AccessComService
             // Set parameters if provided
             if (parameters != null && parameters.Count > 0)
             {
-                foreach (dynamic param in queryDef.Parameters)
+                queryParams = queryDef.Parameters;
+                foreach (dynamic param in queryParams)
                 {
                     try
                     {
@@ -1341,6 +1678,8 @@ public class AccessComService
                         ReleaseComObject(param);
                     }
                 }
+                ReleaseComObject(queryParams);
+                queryParams = null;
             }
 
             var queryType = queryDef.Type;
@@ -1388,8 +1727,10 @@ public class AccessComService
         finally
         {
             ReleaseComObject(recordset);
+            ReleaseComObject(queryParams);
             ReleaseComObject(queryDef);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1458,6 +1799,7 @@ public class AccessComService
         {
             ReleaseComObject(queryDef);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1505,6 +1847,7 @@ public class AccessComService
         finally
         {
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1520,6 +1863,8 @@ public class AccessComService
         var app = GetDatabase(filePath);
         var relationships = new List<RelationshipInfo>();
         dynamic? currentDb = null;
+        dynamic? relations = null;
+        dynamic? relationFields = null;
 
         try
         {
@@ -1529,7 +1874,8 @@ public class AccessComService
                 throw new VbaOperationException("Failed to access database");
             }
 
-            foreach (dynamic relation in currentDb.Relations)
+            relations = currentDb.Relations;
+            foreach (dynamic relation in relations)
             {
                 try
                 {
@@ -1542,12 +1888,15 @@ public class AccessComService
                     var parentFields = new List<string>();
                     var childFields = new List<string>();
 
-                    foreach (dynamic field in relation.Fields)
+                    relationFields = relation.Fields;
+                    foreach (dynamic field in relationFields)
                     {
                         parentFields.Add((string)field.Name);
                         childFields.Add((string)field.ForeignName);
                         ReleaseComObject(field);
                     }
+                    ReleaseComObject(relationFields);
+                    relationFields = null;
 
                     // Parse attributes flags
                     int attr = attributes;
@@ -1594,7 +1943,10 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(relationFields);
+            ReleaseComObject(relations);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
 
         return relationships;
@@ -1613,6 +1965,8 @@ public class AccessComService
         var indexes = new List<IndexInfo>();
         dynamic? currentDb = null;
         dynamic? tableDef = null;
+        dynamic? tableIndexes = null;
+        dynamic? indexFields = null;
 
         try
         {
@@ -1631,7 +1985,8 @@ public class AccessComService
                 throw new TableNotFoundException(tableName, filePath);
             }
 
-            foreach (dynamic index in tableDef.Indexes)
+            tableIndexes = tableDef.Indexes;
+            foreach (dynamic index in tableIndexes)
             {
                 try
                 {
@@ -1644,11 +1999,14 @@ public class AccessComService
 
                     // Get fields in the index
                     var fields = new List<string>();
-                    foreach (dynamic field in index.Fields)
+                    indexFields = index.Fields;
+                    foreach (dynamic field in indexFields)
                     {
                         fields.Add((string)field.Name);
                         ReleaseComObject(field);
                     }
+                    ReleaseComObject(indexFields);
+                    indexFields = null;
 
                     var indexInfo = new IndexInfo
                     {
@@ -1690,8 +2048,11 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(indexFields);
+            ReleaseComObject(tableIndexes);
             ReleaseComObject(tableDef);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
 
         return indexes;
@@ -1708,6 +2069,12 @@ public class AccessComService
     {
         var app = GetDatabase(filePath);
         dynamic? currentDb = null;
+        dynamic? tableDefs = null;
+        dynamic? queryDefs = null;
+        dynamic? relations = null;
+        dynamic? currentProject = null;
+        dynamic? allForms = null;
+        dynamic? allReports = null;
 
         try
         {
@@ -1722,7 +2089,8 @@ public class AccessComService
 
             // Count objects
             int tableCount = 0;
-            foreach (dynamic tableDef in currentDb.TableDefs)
+            tableDefs = currentDb.TableDefs;
+            foreach (dynamic tableDef in tableDefs)
             {
                 string name = tableDef.Name;
                 int attrs = tableDef.Attributes;
@@ -1735,7 +2103,8 @@ public class AccessComService
             }
 
             int queryCount = 0;
-            foreach (dynamic queryDef in currentDb.QueryDefs)
+            queryDefs = currentDb.QueryDefs;
+            foreach (dynamic queryDef in queryDefs)
             {
                 string name = queryDef.Name;
                 if (!name.StartsWith("~"))
@@ -1746,7 +2115,8 @@ public class AccessComService
             }
 
             int relationshipCount = 0;
-            foreach (dynamic relation in currentDb.Relations)
+            relations = currentDb.Relations;
+            foreach (dynamic relation in relations)
             {
                 relationshipCount++;
                 ReleaseComObject(relation);
@@ -1757,7 +2127,10 @@ public class AccessComService
             int reportCount = 0;
             try
             {
-                foreach (dynamic formObj in app.CurrentProject.AllForms)
+                // CRITICAL: Store CurrentProject in variable to release RCW
+                currentProject = app.CurrentProject;
+                allForms = currentProject.AllForms;
+                foreach (dynamic formObj in allForms)
                 {
                     formCount++;
                     ReleaseComObject(formObj);
@@ -1770,7 +2143,13 @@ public class AccessComService
 
             try
             {
-                foreach (dynamic reportObj in app.CurrentProject.AllReports)
+                // CRITICAL: Reuse currentProject variable (already retrieved above)
+                if (currentProject == null)
+                {
+                    currentProject = app.CurrentProject;
+                }
+                allReports = currentProject.AllReports;
+                foreach (dynamic reportObj in allReports)
                 {
                     reportCount++;
                     ReleaseComObject(reportObj);
@@ -1820,7 +2199,14 @@ public class AccessComService
         }
         finally
         {
+            ReleaseComObject(allReports);
+            ReleaseComObject(allForms);
+            ReleaseComObject(currentProject);  // CRITICAL: Release CurrentProject RCW
+            ReleaseComObject(relations);
+            ReleaseComObject(queryDefs);
+            ReleaseComObject(tableDefs);
             ReleaseComObject(currentDb);
+            ReleaseComObject(app);
         }
     }
 
@@ -1831,10 +2217,15 @@ public class AccessComService
     {
         var app = GetDatabase(filePath);
         var forms = new List<DatabaseObjectInfo>();
+        dynamic? currentProject = null;
+        dynamic? allForms = null;
 
         try
         {
-            foreach (dynamic formObj in app!.CurrentProject.AllForms)
+            // CRITICAL: Store CurrentProject in variable to release RCW
+            currentProject = app!.CurrentProject;
+            allForms = currentProject.AllForms;
+            foreach (dynamic formObj in allForms)
             {
                 try
                 {
@@ -1866,6 +2257,12 @@ public class AccessComService
             _logger.LogError(ex, "Error listing forms in {Path}", filePath);
             throw new VbaOperationException($"Failed to list forms: {ex.Message}", ex);
         }
+        finally
+        {
+            ReleaseComObject(allForms);
+            ReleaseComObject(currentProject);  // CRITICAL: Release CurrentProject RCW
+            ReleaseComObject(app);
+        }
 
         return forms;
     }
@@ -1877,10 +2274,15 @@ public class AccessComService
     {
         var app = GetDatabase(filePath);
         var reports = new List<DatabaseObjectInfo>();
+        dynamic? currentProject = null;
+        dynamic? allReports = null;
 
         try
         {
-            foreach (dynamic reportObj in app!.CurrentProject.AllReports)
+            // CRITICAL: Store CurrentProject in variable to release RCW
+            currentProject = app!.CurrentProject;
+            allReports = currentProject.AllReports;
+            foreach (dynamic reportObj in allReports)
             {
                 try
                 {
@@ -1911,6 +2313,12 @@ public class AccessComService
         {
             _logger.LogError(ex, "Error listing reports in {Path}", filePath);
             throw new VbaOperationException($"Failed to list reports: {ex.Message}", ex);
+        }
+        finally
+        {
+            ReleaseComObject(allReports);
+            ReleaseComObject(currentProject);  // CRITICAL: Release CurrentProject RCW
+            ReleaseComObject(app);
         }
 
         return reports;
@@ -2072,53 +2480,62 @@ public class AccessComService
     {
         var columnNames = new List<string>();
         var rows = new List<Dictionary<string, object?>>();
+        dynamic? fields = null;
 
-        // Get column names
-        foreach (var field in recordset.Fields)
+        try
         {
-            columnNames.Add(field.Name);
-        }
+            // Get column names
+            fields = recordset.Fields;
+            foreach (var field in fields)
+            {
+                columnNames.Add(field.Name);
+            }
 
-        // Count total rows
-        var totalRows = 0;
-        if (!recordset.EOF)
-        {
-            recordset.MoveLast();
-            totalRows = recordset.RecordCount;
-            recordset.MoveFirst();
-        }
+            // Count total rows
+            var totalRows = 0;
+            if (!recordset.EOF)
+            {
+                recordset.MoveLast();
+                totalRows = recordset.RecordCount;
+                recordset.MoveFirst();
+            }
 
-        // Skip offset rows
-        if (offset > 0 && !recordset.EOF)
-        {
-            recordset.Move(offset);
-        }
+            // Skip offset rows
+            if (offset > 0 && !recordset.EOF)
+            {
+                recordset.Move(offset);
+            }
 
-        // Read data rows
-        var count = 0;
-        while (!recordset.EOF && count < limit)
-        {
-            var row = new Dictionary<string, object?>();
-            foreach (var field in recordset.Fields)
+            // Read data rows
+            var count = 0;
+            while (!recordset.EOF && count < limit)
+            {
+                var row = new Dictionary<string, object?>();
+                foreach (var field in fields)
             {
                 var value = field.Value;
                 row[field.Name] = ConvertDbValue(value);
             }
-            rows.Add(row);
-            count++;
-            recordset.MoveNext();
+                rows.Add(row);
+                count++;
+                recordset.MoveNext();
+            }
+
+            var hasMore = !recordset.EOF;
+
+            return new TableDataResult
+            {
+                ColumnNames = columnNames,
+                Rows = rows,
+                TotalRows = totalRows,
+                ReturnedRows = rows.Count,
+                HasMore = hasMore
+            };
         }
-
-        var hasMore = !recordset.EOF;
-
-        return new TableDataResult
+        finally
         {
-            ColumnNames = columnNames,
-            Rows = rows,
-            TotalRows = totalRows,
-            ReturnedRows = rows.Count,
-            HasMore = hasMore
-        };
+            ReleaseComObject(fields);
+        }
     }
 
     /// <summary>

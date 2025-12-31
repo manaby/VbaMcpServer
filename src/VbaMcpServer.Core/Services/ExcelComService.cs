@@ -65,6 +65,7 @@ public class ExcelComService
     public Excel.Workbook? GetWorkbook(string filePath)
     {
         Excel.Application? excel = null;
+        Excel.Workbooks? workbooks = null;
         Excel.Workbook? wb = null;
         Excel.Workbook? result = null;
 
@@ -75,7 +76,8 @@ public class ExcelComService
 
             var normalizedPath = Path.GetFullPath(filePath);
 
-            foreach (Excel.Workbook workbook in excel.Workbooks)
+            workbooks = excel.Workbooks;
+            foreach (Excel.Workbook workbook in workbooks)
             {
                 wb = workbook;
                 try
@@ -103,6 +105,7 @@ public class ExcelComService
         }
         finally
         {
+            ReleaseComObject(workbooks);
             ReleaseComObject(excel);
         }
     }
@@ -114,6 +117,7 @@ public class ExcelComService
     {
         var result = new List<string>();
         Excel.Application? excel = null;
+        Excel.Workbooks? workbooks = null;
         Excel.Workbook? wb = null;
 
         try
@@ -121,7 +125,8 @@ public class ExcelComService
             excel = GetExcelApplication();
             if (excel == null) return result;
 
-            foreach (Excel.Workbook workbook in excel.Workbooks)
+            workbooks = excel.Workbooks;
+            foreach (Excel.Workbook workbook in workbooks)
             {
                 wb = workbook;
                 try
@@ -139,6 +144,7 @@ public class ExcelComService
         }
         finally
         {
+            ReleaseComObject(workbooks);
             ReleaseComObject(excel);
         }
     }
@@ -151,6 +157,7 @@ public class ExcelComService
         var result = new List<ModuleInfo>();
         Excel.Workbook? workbook = null;
         VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponents? vbComponents = null;
         VBIDE.VBComponent? component = null;
         VBIDE.CodeModule? codeModule = null;
 
@@ -164,8 +171,9 @@ public class ExcelComService
             }
 
             vbProject = workbook.VBProject;
+            vbComponents = vbProject.VBComponents;
 
-            foreach (VBIDE.VBComponent comp in vbProject.VBComponents)
+            foreach (VBIDE.VBComponent comp in vbComponents)
             {
                 component = comp;
                 try
@@ -195,6 +203,7 @@ public class ExcelComService
         }
         finally
         {
+            ReleaseComObject(vbComponents);
             ReleaseComObject(vbProject);
             ReleaseComObject(workbook);
         }
@@ -677,9 +686,11 @@ public class ExcelComService
     }
 
     /// <summary>
-    /// Write/replace a specific procedure in a module
+    /// Write/replace a specific procedure in a module.
+    /// If the procedure does not exist, it will be added to the end of the module.
     /// </summary>
-    public void WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
+    /// <returns>"replaced" if existing procedure was replaced, "added" if new procedure was added</returns>
+    public string WriteProcedure(string filePath, string moduleName, string procedureName, string newCode)
     {
         Excel.Workbook? workbook = null;
         VBIDE.VBProject? vbProject = null;
@@ -688,6 +699,9 @@ public class ExcelComService
 
         try
         {
+            // Preprocess code: unescape XML entities and normalize line endings
+            newCode = CodeNormalizer.PreprocessCode(newCode);
+
             workbook = GetWorkbook(filePath);
 
             if (workbook == null)
@@ -712,9 +726,16 @@ public class ExcelComService
             codeModule = component.CodeModule;
             var lineCount = codeModule.CountOfLines;
 
+            // If module is empty, add the procedure
             if (lineCount == 0)
             {
-                throw new ArgumentException($"Module '{moduleName}' is empty");
+                if (!string.IsNullOrEmpty(newCode))
+                {
+                    codeModule.InsertLines(1, newCode);
+                }
+                _logger.LogInformation("Added procedure {Procedure} to empty module {Module} in {Path}",
+                    procedureName, moduleName, filePath);
+                return "added";
             }
 
             // Search for the procedure
@@ -753,8 +774,27 @@ public class ExcelComService
 
             if (!found)
             {
-                throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'");
+                // Procedure not found, add it to the end of the module
+                var insertLine = codeModule.CountOfLines + 1;
+
+                // Add a blank line before the new procedure if module is not empty
+                if (codeModule.CountOfLines > 0)
+                {
+                    codeModule.InsertLines(insertLine, "");
+                    insertLine++;
+                }
+
+                if (!string.IsNullOrEmpty(newCode))
+                {
+                    codeModule.InsertLines(insertLine, newCode);
+                }
+
+                _logger.LogInformation("Added procedure {Procedure} to module {Module} in {Path}",
+                    procedureName, moduleName, filePath);
+                return "added";
             }
+
+            return "replaced";
         }
         catch (VbaProjectAccessDeniedException)
         {
@@ -781,6 +821,266 @@ public class ExcelComService
             ReleaseComObject(vbProject);
             ReleaseComObject(workbook);
         }
+    }
+
+    /// <summary>
+    /// Add a new procedure to a module. If a procedure with the same name exists, throws an exception.
+    /// </summary>
+    /// <param name="insertAfter">Insert after this procedure (null = append to end)</param>
+    public void AddProcedure(string filePath, string moduleName, string code, string? insertAfter = null)
+    {
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
+
+        try
+        {
+            // Preprocess code
+            code = CodeNormalizer.PreprocessCode(code);
+
+            // Extract procedure name from code
+            string procedureName = CodeNormalizer.ExtractProcedureName(code);
+
+            workbook = GetWorkbook(filePath);
+            if (workbook == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            vbProject = workbook.VBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            codeModule = component.CodeModule;
+
+            // Check if procedure already exists
+            if (ProcedureExists(codeModule, procedureName))
+            {
+                throw new ArgumentException(
+                    $"Procedure '{procedureName}' already exists in module '{moduleName}'. " +
+                    "Use WriteProcedure to replace it, or use a different procedure name.");
+            }
+
+            // Determine insertion line
+            int insertLine;
+            if (!string.IsNullOrEmpty(insertAfter))
+            {
+                // Insert after specified procedure
+                insertLine = FindProcedureEndLine(codeModule, insertAfter);
+                if (insertLine == -1)
+                {
+                    throw new ArgumentException(
+                        $"Procedure '{insertAfter}' not found in module '{moduleName}'");
+                }
+                insertLine++; // Insert on the line after the procedure ends
+            }
+            else
+            {
+                // Append to end
+                insertLine = codeModule.CountOfLines + 1;
+            }
+
+            // Add blank line before the new procedure if not at the beginning
+            if (codeModule.CountOfLines > 0 && insertLine <= codeModule.CountOfLines)
+            {
+                codeModule.InsertLines(insertLine, "");
+                insertLine++;
+            }
+
+            // Insert the code
+            codeModule.InsertLines(insertLine, code);
+
+            _logger.LogInformation("Added procedure {Procedure} to module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding procedure to module {Module} in {Path}",
+                moduleName, filePath);
+            throw new VbaOperationException($"Failed to add procedure: {ex.Message}", ex);
+        }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
+    }
+
+    /// <summary>
+    /// Delete a procedure from a module
+    /// </summary>
+    public void DeleteProcedure(string filePath, string moduleName, string procedureName)
+    {
+        Excel.Workbook? workbook = null;
+        VBIDE.VBProject? vbProject = null;
+        VBIDE.VBComponent? component = null;
+        VBIDE.CodeModule? codeModule = null;
+
+        try
+        {
+            workbook = GetWorkbook(filePath);
+            if (workbook == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            vbProject = workbook.VBProject;
+            if (vbProject == null)
+            {
+                throw new VbaProjectAccessDeniedException(filePath);
+            }
+
+            component = vbProject.VBComponents.Cast<VBIDE.VBComponent>()
+                .FirstOrDefault(c => c.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (component == null)
+            {
+                throw new ModuleNotFoundException(filePath, moduleName);
+            }
+
+            codeModule = component.CodeModule;
+            var lineCount = codeModule.CountOfLines;
+
+            if (lineCount == 0)
+            {
+                throw new ArgumentException($"Module '{moduleName}' is empty");
+            }
+
+            // Search for the procedure
+            for (int line = 1; line <= lineCount; line++)
+            {
+                try
+                {
+                    var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind procKind);
+
+                    if (!string.IsNullOrEmpty(procName) &&
+                        procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                        var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+
+                        // Delete the procedure
+                        codeModule.DeleteLines(startLine, procLineCount);
+
+                        _logger.LogInformation("Deleted procedure {Procedure} from module {Module} in {Path}",
+                            procedureName, moduleName, filePath);
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Continue searching
+                }
+            }
+
+            throw new ArgumentException($"Procedure '{procedureName}' not found in module '{moduleName}'");
+        }
+        catch (VbaProjectAccessDeniedException)
+        {
+            throw;
+        }
+        catch (ModuleNotFoundException)
+        {
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting procedure {Procedure} from module {Module} in {Path}",
+                procedureName, moduleName, filePath);
+            throw new VbaOperationException($"Failed to delete procedure '{procedureName}': {ex.Message}", ex);
+        }
+        finally
+        {
+            ReleaseComObject(codeModule);
+            ReleaseComObject(component);
+            ReleaseComObject(vbProject);
+            ReleaseComObject(workbook);
+        }
+    }
+
+    /// <summary>
+    /// Check if a procedure exists in a code module
+    /// </summary>
+    private bool ProcedureExists(VBIDE.CodeModule codeModule, string procedureName)
+    {
+        var lineCount = codeModule.CountOfLines;
+        if (lineCount == 0) return false;
+
+        for (int line = 1; line <= lineCount; line++)
+        {
+            try
+            {
+                var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind _);
+                if (!string.IsNullOrEmpty(procName) &&
+                    procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Continue
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Find the end line of a procedure
+    /// </summary>
+    private int FindProcedureEndLine(VBIDE.CodeModule codeModule, string procedureName)
+    {
+        var lineCount = codeModule.CountOfLines;
+        if (lineCount == 0) return -1;
+
+        for (int line = 1; line <= lineCount; line++)
+        {
+            try
+            {
+                var procName = codeModule.get_ProcOfLine(line, out VBIDE.vbext_ProcKind procKind);
+                if (!string.IsNullOrEmpty(procName) &&
+                    procName.Equals(procedureName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var startLine = codeModule.get_ProcStartLine(procName, procKind);
+                    var procLineCount = codeModule.get_ProcCountLines(procName, procKind);
+                    return startLine + procLineCount - 1;
+                }
+            }
+            catch
+            {
+                // Continue
+            }
+        }
+        return -1;
     }
 
     private string GetProcedureTypeName(VBIDE.vbext_ProcKind procKind, string? firstLine = null)

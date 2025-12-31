@@ -62,30 +62,72 @@ public class FileOpenerService : IDisposable
             if (fileType == FileType.Excel)
             {
                 // ExcelComService を使用して確認
-                var workbook = _excelComService.GetWorkbook(filePath);
-                if (workbook != null)
+                Excel.Workbook? workbook = null;
+                try
                 {
-                    info.IsOpen = true;
-                    // プロセスIDの取得（Excel.Application から）
-                    try
+                    workbook = _excelComService.GetWorkbook(filePath);
+                    if (workbook != null)
                     {
-                        var excelApp = (Excel.Application)ComHelper.GetActiveObject("Excel.Application");
-                        info.ProcessId = GetProcessIdFromHwnd(excelApp.Hwnd);
-                        _logger.LogInformation("File is already open in Excel: {FilePath}", filePath);
+                        info.IsOpen = true;
+                        // プロセスIDの取得（Excel.Application から）
+                        Excel.Application? excelApp = null;
+                        try
+                        {
+                            excelApp = (Excel.Application)ComHelper.GetActiveObject("Excel.Application");
+                            info.ProcessId = GetProcessIdFromHwnd(excelApp.Hwnd);
+                            _logger.LogInformation("File is already open in Excel: {FilePath}", filePath);
+                        }
+                        catch (COMException ex)
+                        {
+                            _logger.LogWarning(ex, "Could not get Excel process ID");
+                        }
+                        finally
+                        {
+                            // CRITICAL: Release the COM object to prevent memory leak
+                            if (excelApp != null)
+                            {
+                                try
+                                {
+                                    Marshal.ReleaseComObject(excelApp);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, "Failed to release Excel COM object");
+                                }
+                                excelApp = null;
+                            }
+                        }
                     }
-                    catch (COMException ex)
+                }
+                finally
+                {
+                    // CRITICAL: Release the workbook COM object
+                    if (workbook != null)
                     {
-                        _logger.LogWarning(ex, "Could not get Excel process ID");
+                        try
+                        {
+                            Marshal.ReleaseComObject(workbook);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to release Workbook COM object");
+                        }
+                        workbook = null;
                     }
                 }
             }
             else if (fileType == FileType.Access)
             {
                 // Access の場合も同様
+                Access.Application? accessApp = null;
+                dynamic? currentProject = null;
                 try
                 {
-                    var accessApp = (Access.Application)ComHelper.GetActiveObject("Access.Application");
-                    if (accessApp.CurrentProject.FullName.Equals(filePath, StringComparison.OrdinalIgnoreCase))
+                    accessApp = (Access.Application)ComHelper.GetActiveObject("Access.Application");
+
+                    // CRITICAL: Store CurrentProject in variable to release RCW later
+                    currentProject = accessApp.CurrentProject;
+                    if (currentProject.FullName.Equals(filePath, StringComparison.OrdinalIgnoreCase))
                     {
                         info.IsOpen = true;
                         info.ProcessId = GetProcessIdFromWindow(accessApp.hWndAccessApp());
@@ -95,6 +137,36 @@ public class FileOpenerService : IDisposable
                 catch (COMException)
                 {
                     // Access が起動していない
+                }
+                finally
+                {
+                    // CRITICAL: Release CurrentProject RCW first (fixes root cause leak)
+                    if (currentProject != null)
+                    {
+                        try
+                        {
+                            Marshal.ReleaseComObject(currentProject);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to release CurrentProject COM object");
+                        }
+                        currentProject = null;
+                    }
+
+                    // CRITICAL: Release the Access.Application COM object
+                    if (accessApp != null)
+                    {
+                        try
+                        {
+                            Marshal.ReleaseComObject(accessApp);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to release Access COM object");
+                        }
+                        accessApp = null;
+                    }
                 }
             }
         }

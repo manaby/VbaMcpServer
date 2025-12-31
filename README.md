@@ -29,6 +29,56 @@ An MCP (Model Context Protocol) server that enables AI coding assistants like Cl
 | Document Module | ✅ | ✅ | ThisWorkbook, Sheet modules |
 | Access Form/Report | ✅ | ✅ | Code-behind only |
 
+## Important Notes for AI Coding Assistants
+
+### VBA Code Writing Guidelines
+
+When writing VBA code through MCP tools, please follow these important guidelines:
+
+#### ❌ DO NOT Apply XML Escaping
+
+MCP communication uses JSON format, **NOT XML**. Do not escape special characters:
+
+**Incorrect (XML-escaped):**
+```vb
+strSQL = strSQL &amp; "VALUES("
+If a &lt; b Then
+    result = c &gt; d
+End If
+```
+
+**Correct:**
+```vb
+strSQL = strSQL & "VALUES("
+If a < b Then
+    result = c > d
+End If
+```
+
+#### ✅ JSON String Escaping Only
+
+In JSON strings, only escape:
+- Double quotes: `"` → `\"`
+- Backslashes: `\` → `\\`
+- Newlines: `\n`
+
+**Example:**
+```json
+{
+  "code": "Sub Test()\n    MsgBox \"Hello\"\nEnd Sub"
+}
+```
+
+### Procedure Write Behavior
+
+The `write_*_vba_procedure` tools now support **upsert** behavior:
+- If the procedure exists → **replaces** it
+- If the procedure does not exist → **adds** it to the end of the module
+
+For explicit control:
+- Use `add_*_vba_procedure` to add only (errors if exists)
+- Use `delete_*_vba_procedure` to delete
+
 ## Quick Start
 
 ### Prerequisites
@@ -36,6 +86,7 @@ An MCP (Model Context Protocol) server that enables AI coding assistants like Cl
 1. Windows 10/11
 2. Microsoft Office 2016 or later (including Microsoft 365)
 3. Enable "Trust access to the VBA project object model" in Office settings
+4. **Local files only** - Excel/Access files must be stored on local drives. Files on OneDrive/SharePoint may not work correctly due to URL resolution issues.
 
 ### Installation
 
@@ -348,6 +399,7 @@ Excel や Access の VBA コードを、Claude Desktop や Cursor などの AI �
 1. Windows 10/11
 2. Microsoft Office 2016 以降（Microsoft 365 含む）
 3. Office の設定で「VBA プロジェクト オブジェクト モデルへのアクセスを信頼する」を有効化
+4. **ローカルファイルのみ対応** - Excel/Access ファイルはローカルドライブに保存されている必要があります。OneDrive/SharePoint 上のファイルは URL 解決の問題により正しく動作しない可能性があります。
 
 ### インストール
 

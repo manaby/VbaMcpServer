@@ -77,3 +77,4 @@ installer/Output/
 *.rsuser
 *.log
 .claude/
+CLAUDE.md
