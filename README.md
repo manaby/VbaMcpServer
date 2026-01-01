@@ -490,6 +490,56 @@ Excel や Access の VBA コードを、Claude Desktop や Cursor などの AI �
 | ドキュメントモジュール | ✅ | ✅ | ThisWorkbook、Sheet モジュール |
 | Access フォーム/レポート | ✅ | ✅ | コードビハインドのみ |
 
+## AIコーディングアシスタントへの重要な注意事項
+
+### VBA コード記述ガイドライン
+
+MCP ツールを通じて VBA コードを記述する際は、以下の重要なガイドラインに従ってください：
+
+#### ❌ XML エスケープを適用しない
+
+MCP 通信は JSON 形式を使用しており、**XML ではありません**。特殊文字をエスケープしないでください：
+
+**誤り（XMLエスケープされている）：**
+```vb
+strSQL = strSQL &amp; "VALUES("
+If a &lt; b Then
+    result = c &gt; d
+End If
+```
+
+**正しい：**
+```vb
+strSQL = strSQL & "VALUES("
+If a < b Then
+    result = c > d
+End If
+```
+
+#### ✅ JSON 文字列エスケープのみ
+
+JSON 文字列内では、以下のみをエスケープしてください：
+- ダブルクォート: `"` → `\"`
+- バックスラッシュ: `\` → `\\`
+- 改行: `\n`
+
+**例：**
+```json
+{
+  "code": "Sub Test()\n    MsgBox \"Hello\"\nEnd Sub"
+}
+```
+
+### プロシージャ書き込み動作
+
+`write_*_vba_procedure` ツールは **upsert** 動作をサポートしています：
+- プロシージャが存在する場合 → **置換**
+- プロシージャが存在しない場合 → モジュールの末尾に**追加**
+
+明示的な制御が必要な場合：
+- `add_*_vba_procedure` を使用して追加のみ（存在する場合はエラー）
+- `delete_*_vba_procedure` を使用して削除
+
 ## クイックスタート
 
 ### 前提条件
@@ -806,6 +856,17 @@ Claude Code(CLI ツール)の場合:
 | `export_access_table_to_csv` | テーブルデータをCSVファイルにエクスポート |
 | `export_access_query_to_csv` | クエリ結果をCSVファイルにエクスポート |
 
+#### フォーム・レポート コントロール操作
+
+| ツール | 説明 |
+|--------|------|
+| `get_access_form_controls` | フォーム内のすべてのコントロールを取得（サブフォーム対応） |
+| `get_access_form_control_properties` | フォームコントロールのプロパティを取得 |
+| `set_access_form_control_property` | フォームコントロールのプロパティを設定 |
+| `get_access_report_controls` | レポート内のすべてのコントロールを取得（サブレポート対応） |
+| `get_access_report_control_properties` | レポートコントロールのプロパティを取得 |
+| `set_access_report_control_property` | レポートコントロールのプロパティを設定 |
+
 **重要事項:**
 - Excel ツールは `.xlsm`, `.xlsb`, `.xls` ファイルに対応
 - Access ツールは `.accdb`, `.mdb` ファイルに対応
@@ -829,6 +890,33 @@ Excel VBA ツール名が Access ツールとの一貫性のために `excel` �
 | `write_vba_procedure` | `write_excel_vba_procedure` |
 
 **対応が必要**: 既存のスクリプトやワークフローで旧ツール名を使用している場合は、新しい名前に更新してください。
+
+## ソースからのビルド
+
+### 要件
+
+- .NET 8 SDK 以降
+- Visual Studio 2022 または VS Code（C# 拡張機能付き）
+
+### ビルド
+
+```bash
+cd src/VbaMcpServer
+dotnet build
+```
+
+### テスト
+
+```bash
+cd tests/VbaMcpServer.Tests
+dotnet test
+```
+
+### 発行
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+```
 
 ## ライセンス
 
