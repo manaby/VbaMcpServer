@@ -8,7 +8,7 @@
     <!-- Assembly Info -->
     <AssemblyName>VbaMcpServer.Core</AssemblyName>
     <RootNamespace>VbaMcpServer</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.6.0</Version>
     <Authors>vba-mcp-server contributors</Authors>
     <Description>Core business logic for VBA MCP Server</Description>
   </PropertyGroup>

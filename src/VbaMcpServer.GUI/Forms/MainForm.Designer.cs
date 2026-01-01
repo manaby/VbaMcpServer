@@ -24,17 +24,20 @@ partial class MainForm
         this.btnStart = new System.Windows.Forms.Button();
         this.btnStop = new System.Windows.Forms.Button();
         this.btnRestart = new System.Windows.Forms.Button();
+        this.btnForceStop = new System.Windows.Forms.Button();
+        this.progressBar = new System.Windows.Forms.ProgressBar();
         this.grpTargetFile = new System.Windows.Forms.GroupBox();
         this.txtFilePath = new System.Windows.Forms.TextBox();
         this.btnBrowseFile = new System.Windows.Forms.Button();
         this.lblFileStatus = new System.Windows.Forms.Label();
         this.btnClearFile = new System.Windows.Forms.Button();
+        this.pnlWarningBanner = new System.Windows.Forms.Panel();
+        this.lblWarningMessage = new System.Windows.Forms.Label();
+        this.lblBackupWarning = new System.Windows.Forms.Label();
         this.grpLogs = new System.Windows.Forms.GroupBox();
         this.tabLogs = new System.Windows.Forms.TabControl();
         this.tabPageServerLog = new System.Windows.Forms.TabPage();
         this.txtServerLog = new System.Windows.Forms.TextBox();
-        this.tabPageVbaLog = new System.Windows.Forms.TabPage();
-        this.txtVbaLog = new System.Windows.Forms.TextBox();
         this.btnClearLogs = new System.Windows.Forms.Button();
         this.btnSaveLogs = new System.Windows.Forms.Button();
         this.grpServerControl.SuspendLayout();
@@ -42,7 +45,6 @@ partial class MainForm
         this.grpLogs.SuspendLayout();
         this.tabLogs.SuspendLayout();
         this.tabPageServerLog.SuspendLayout();
-        this.tabPageVbaLog.SuspendLayout();
         this.SuspendLayout();
 
         // grpServerControl
@@ -53,7 +55,9 @@ partial class MainForm
         this.grpServerControl.Controls.Add(this.btnStart);
         this.grpServerControl.Controls.Add(this.btnStop);
         this.grpServerControl.Controls.Add(this.btnRestart);
-        this.grpServerControl.Location = new System.Drawing.Point(12, 118);
+        this.grpServerControl.Controls.Add(this.btnForceStop);
+        this.grpServerControl.Controls.Add(this.progressBar);
+        this.grpServerControl.Location = new System.Drawing.Point(12, 148);
         this.grpServerControl.Name = "grpServerControl";
         this.grpServerControl.Size = new System.Drawing.Size(760, 100);
         this.grpServerControl.TabIndex = 0;
@@ -106,9 +110,29 @@ partial class MainForm
         this.btnRestart.UseVisualStyleBackColor = true;
         this.btnRestart.Click += new System.EventHandler(this.btnRestart_Click);
 
+        // btnForceStop
+        this.btnForceStop.BackColor = System.Drawing.Color.OrangeRed;
+        this.btnForceStop.ForeColor = System.Drawing.Color.White;
+        this.btnForceStop.Location = new System.Drawing.Point(580, 25);
+        this.btnForceStop.Name = "btnForceStop";
+        this.btnForceStop.Size = new System.Drawing.Size(100, 30);
+        this.btnForceStop.TabIndex = 5;
+        this.btnForceStop.Text = "Force Stop";
+        this.btnForceStop.UseVisualStyleBackColor = false;
+        this.btnForceStop.Visible = false;
+
+        // progressBar
+        this.progressBar.Location = new System.Drawing.Point(250, 65);
+        this.progressBar.Name = "progressBar";
+        this.progressBar.Size = new System.Drawing.Size(430, 20);
+        this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
+        this.progressBar.TabIndex = 6;
+        this.progressBar.Visible = false;
+
         // grpTargetFile
         this.grpTargetFile.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
+        this.grpTargetFile.Controls.Add(this.pnlWarningBanner);
         this.grpTargetFile.Controls.Add(this.txtFilePath);
         this.grpTargetFile.Controls.Add(this.btnBrowseFile);
         this.grpTargetFile.Controls.Add(this.lblFileStatus);
@@ -158,6 +182,40 @@ partial class MainForm
         this.btnClearFile.UseVisualStyleBackColor = true;
         this.btnClearFile.Click += new System.EventHandler(this.btnClearFile_Click);
 
+        // pnlWarningBanner
+        this.pnlWarningBanner.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+        this.pnlWarningBanner.BackColor = System.Drawing.Color.Orange;
+        this.pnlWarningBanner.Controls.Add(this.lblWarningMessage);
+        this.pnlWarningBanner.Location = new System.Drawing.Point(15, 65);
+        this.pnlWarningBanner.Name = "pnlWarningBanner";
+        this.pnlWarningBanner.Padding = new System.Windows.Forms.Padding(5);
+        this.pnlWarningBanner.Size = new System.Drawing.Size(730, 30);
+        this.pnlWarningBanner.TabIndex = 4;
+        this.pnlWarningBanner.Visible = false;
+
+        // lblWarningMessage
+        this.lblWarningMessage.AutoSize = true;
+        this.lblWarningMessage.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+        this.lblWarningMessage.ForeColor = System.Drawing.Color.White;
+        this.lblWarningMessage.Location = new System.Drawing.Point(5, 7);
+        this.lblWarningMessage.Name = "lblWarningMessage";
+        this.lblWarningMessage.Size = new System.Drawing.Size(350, 15);
+        this.lblWarningMessage.TabIndex = 0;
+        this.lblWarningMessage.Text = "⚠ WARNING: File is closed. Please keep the file open.";
+
+        // lblBackupWarning
+        this.lblBackupWarning.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+        this.lblBackupWarning.AutoSize = true;
+        this.lblBackupWarning.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+        this.lblBackupWarning.ForeColor = System.Drawing.Color.DarkRed;
+        this.lblBackupWarning.Location = new System.Drawing.Point(12, 120);
+        this.lblBackupWarning.Name = "lblBackupWarning";
+        this.lblBackupWarning.Size = new System.Drawing.Size(600, 15);
+        this.lblBackupWarning.TabIndex = 3;
+        this.lblBackupWarning.Text = "⚠ IMPORTANT: Please create a manual backup before performing any update operations.";
+
         // grpLogs
         this.grpLogs.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
             | System.Windows.Forms.AnchorStyles.Left)
@@ -165,9 +223,9 @@ partial class MainForm
         this.grpLogs.Controls.Add(this.tabLogs);
         this.grpLogs.Controls.Add(this.btnClearLogs);
         this.grpLogs.Controls.Add(this.btnSaveLogs);
-        this.grpLogs.Location = new System.Drawing.Point(12, 224);
+        this.grpLogs.Location = new System.Drawing.Point(12, 254);
         this.grpLogs.Name = "grpLogs";
-        this.grpLogs.Size = new System.Drawing.Size(760, 400);
+        this.grpLogs.Size = new System.Drawing.Size(760, 370);
         this.grpLogs.TabIndex = 2;
         this.grpLogs.TabStop = false;
         this.grpLogs.Text = "Log Viewer";
@@ -177,7 +235,6 @@ partial class MainForm
             | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
         this.tabLogs.Controls.Add(this.tabPageServerLog);
-        this.tabLogs.Controls.Add(this.tabPageVbaLog);
         this.tabLogs.Location = new System.Drawing.Point(15, 25);
         this.tabLogs.Name = "tabLogs";
         this.tabLogs.SelectedIndex = 0;
@@ -208,30 +265,6 @@ partial class MainForm
         this.txtServerLog.TabIndex = 0;
         this.txtServerLog.WordWrap = false;
 
-        // tabPageVbaLog
-        this.tabPageVbaLog.Controls.Add(this.txtVbaLog);
-        this.tabPageVbaLog.Location = new System.Drawing.Point(4, 24);
-        this.tabPageVbaLog.Name = "tabPageVbaLog";
-        this.tabPageVbaLog.Padding = new System.Windows.Forms.Padding(3);
-        this.tabPageVbaLog.Size = new System.Drawing.Size(722, 302);
-        this.tabPageVbaLog.TabIndex = 1;
-        this.tabPageVbaLog.Text = "VBA Edit Log";
-        this.tabPageVbaLog.UseVisualStyleBackColor = true;
-
-        // txtVbaLog
-        this.txtVbaLog.BackColor = System.Drawing.Color.Black;
-        this.txtVbaLog.Dock = System.Windows.Forms.DockStyle.Fill;
-        this.txtVbaLog.Font = new System.Drawing.Font("Consolas", 9F);
-        this.txtVbaLog.ForeColor = System.Drawing.Color.LightGreen;
-        this.txtVbaLog.Location = new System.Drawing.Point(3, 3);
-        this.txtVbaLog.Multiline = true;
-        this.txtVbaLog.Name = "txtVbaLog";
-        this.txtVbaLog.ReadOnly = true;
-        this.txtVbaLog.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-        this.txtVbaLog.Size = new System.Drawing.Size(716, 296);
-        this.txtVbaLog.TabIndex = 0;
-        this.txtVbaLog.WordWrap = false;
-
         // btnClearLogs
         this.btnClearLogs.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
         this.btnClearLogs.Location = new System.Drawing.Point(15, 365);
@@ -256,6 +289,7 @@ partial class MainForm
         this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
         this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
         this.ClientSize = new System.Drawing.Size(784, 636);
+        this.Controls.Add(this.lblBackupWarning);
         this.Controls.Add(this.grpLogs);
         this.Controls.Add(this.grpServerControl);
         this.Controls.Add(this.grpTargetFile);
@@ -270,8 +304,6 @@ partial class MainForm
         this.tabLogs.ResumeLayout(false);
         this.tabPageServerLog.ResumeLayout(false);
         this.tabPageServerLog.PerformLayout();
-        this.tabPageVbaLog.ResumeLayout(false);
-        this.tabPageVbaLog.PerformLayout();
         this.ResumeLayout(false);
     }
 
@@ -283,17 +315,20 @@ partial class MainForm
     private System.Windows.Forms.Button btnStart;
     private System.Windows.Forms.Button btnStop;
     private System.Windows.Forms.Button btnRestart;
+    private System.Windows.Forms.Button btnForceStop;
+    private System.Windows.Forms.ProgressBar progressBar;
     private System.Windows.Forms.GroupBox grpTargetFile;
     private System.Windows.Forms.TextBox txtFilePath;
     private System.Windows.Forms.Button btnBrowseFile;
     private System.Windows.Forms.Label lblFileStatus;
     private System.Windows.Forms.Button btnClearFile;
+    private System.Windows.Forms.Panel pnlWarningBanner;
+    private System.Windows.Forms.Label lblWarningMessage;
+    private System.Windows.Forms.Label lblBackupWarning;
     private System.Windows.Forms.GroupBox grpLogs;
     private System.Windows.Forms.TabControl tabLogs;
     private System.Windows.Forms.TabPage tabPageServerLog;
     private System.Windows.Forms.TextBox txtServerLog;
-    private System.Windows.Forms.TabPage tabPageVbaLog;
-    private System.Windows.Forms.TextBox txtVbaLog;
     private System.Windows.Forms.Button btnClearLogs;
     private System.Windows.Forms.Button btnSaveLogs;
 }

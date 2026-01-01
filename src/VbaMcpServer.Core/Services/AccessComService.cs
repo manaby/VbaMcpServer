@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Office.Interop.Access;
 using VbaMcpServer.Exceptions;
@@ -2646,6 +2647,1002 @@ public class AccessComService
         }
 
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    #endregion
+
+    #region Form and Report Control Operations
+
+    /// <summary>
+    /// Get all controls in a form
+    /// </summary>
+    public List<FormControlInfo> GetFormControls(string filePath, string formName, bool includeChildren = false)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? form = null;
+
+        try
+        {
+            // Open form in design view
+            app!.DoCmd.OpenForm(formName, AcFormView.acDesign);
+
+            // Get form object
+            try
+            {
+                form = app.Forms[formName];
+            }
+            catch
+            {
+                throw new FormNotFoundException(formName, filePath);
+            }
+
+            // Enumerate controls
+            var controls = EnumerateFormControls(form, includeChildren);
+
+            _logger.LogInformation("Retrieved {Count} controls from form {Form}",
+                (object)controls.Count, (object)formName);
+
+            return controls;
+        }
+        catch (FormNotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting controls from form {Form} in {Path}",
+                formName, filePath);
+            throw new VbaOperationException($"Failed to get form controls: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close form without saving
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acForm, formName, AcCloseSave.acSaveNo);
+            }
+            catch { }
+
+            ReleaseComObject(form);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Get properties of a specific control in a form
+    /// </summary>
+    public ControlPropertyInfo GetFormControlProperties(string filePath, string formName,
+        string controlName, string[]? properties = null)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? form = null;
+        dynamic? control = null;
+        dynamic? props = null;
+
+        try
+        {
+            // Open form in design view
+            app!.DoCmd.OpenForm(formName, AcFormView.acDesign);
+
+            // Get form object
+            try
+            {
+                form = app.Forms[formName];
+            }
+            catch
+            {
+                throw new FormNotFoundException(formName, filePath);
+            }
+
+            // Get control
+            try
+            {
+                control = form.Controls[controlName];
+            }
+            catch
+            {
+                throw new ControlNotFoundException(controlName, formName, filePath);
+            }
+
+            // Get control type
+            int controlTypeId = (int)control.ControlType;
+            string controlType = MapControlType(controlTypeId);
+
+            // Get properties
+            Dictionary<string, object?> propertyDict;
+            if (properties == null || properties.Length == 0)
+            {
+                propertyDict = GetAllProperties(control);
+            }
+            else
+            {
+                propertyDict = GetSpecificProperties(control, properties);
+            }
+
+            var result = new ControlPropertyInfo
+            {
+                File = filePath,
+                ObjectName = formName,
+                ControlName = controlName,
+                ControlType = controlType,
+                Properties = propertyDict
+            };
+
+            _logger.LogInformation("Retrieved {Count} properties from control {Control} in form {Form}",
+                (object)propertyDict.Count, (object)controlName, (object)formName);
+
+            return result;
+        }
+        catch (FormNotFoundException)
+        {
+            throw;
+        }
+        catch (ControlNotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting properties for control {Control} in form {Form} in {Path}",
+                controlName, formName, filePath);
+            throw new VbaOperationException($"Failed to get control properties: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close form without saving
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acForm, formName, AcCloseSave.acSaveNo);
+            }
+            catch { }
+
+            ReleaseComObject(props);
+            ReleaseComObject(control);
+            ReleaseComObject(form);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Set a property value on a form control
+    /// </summary>
+    public SetPropertyResult SetFormControlProperty(string filePath, string formName,
+        string controlName, string propertyName, object propertyValue)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? form = null;
+        dynamic? control = null;
+        dynamic? property = null;
+
+        try
+        {
+            // Open form in design view
+            app!.DoCmd.OpenForm(formName, AcFormView.acDesign);
+
+            // Get form object
+            try
+            {
+                form = app.Forms[formName];
+            }
+            catch
+            {
+                throw new FormNotFoundException(formName, filePath);
+            }
+
+            // Get control
+            try
+            {
+                control = form.Controls[controlName];
+            }
+            catch
+            {
+                throw new ControlNotFoundException(controlName, formName, filePath);
+            }
+
+            // Get property
+            try
+            {
+                property = control.Properties[propertyName];
+            }
+            catch
+            {
+                throw new PropertyNotFoundException(propertyName, controlName, filePath);
+            }
+
+            // Get previous value
+            object? previousValue = null;
+            try
+            {
+                previousValue = property.Value;
+            }
+            catch { }
+
+            // Set new value
+            try
+            {
+                var convertedValue = ConvertJsonValueToComVariant(propertyValue);
+                property.Value = convertedValue;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                if (ex.Message.Contains("read-only") || ex.Message.Contains("read only"))
+                {
+                    throw new PropertyReadOnlyException(propertyName, controlName, filePath);
+                }
+                throw new InvalidPropertyValueException(propertyName, propertyValue, filePath);
+            }
+
+            // Save form
+            app.DoCmd.Save(AcObjectType.acForm, formName);
+
+            var result = new SetPropertyResult
+            {
+                Success = true,
+                File = filePath,
+                ObjectName = formName,
+                ControlName = controlName,
+                PropertyName = propertyName,
+                PreviousValue = ConvertPropertyValue(previousValue),
+                NewValue = ConvertPropertyValue(propertyValue)
+            };
+
+            _logger.LogInformation("Set property {Property} = {Value} on control {Control} in form {Form}",
+                (object)propertyName, (object)propertyValue, (object)controlName, (object)formName);
+
+            return result;
+        }
+        catch (FormNotFoundException)
+        {
+            throw;
+        }
+        catch (ControlNotFoundException)
+        {
+            throw;
+        }
+        catch (PropertyNotFoundException)
+        {
+            throw;
+        }
+        catch (PropertyReadOnlyException)
+        {
+            throw;
+        }
+        catch (InvalidPropertyValueException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting property {Property} on control {Control} in form {Form} in {Path}",
+                propertyName, controlName, formName, filePath);
+            throw new VbaOperationException($"Failed to set control property: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close form
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acForm, formName, AcCloseSave.acSaveYes);
+            }
+            catch { }
+
+            ReleaseComObject(property);
+            ReleaseComObject(control);
+            ReleaseComObject(form);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Get all controls in a report
+    /// </summary>
+    public List<ReportControlInfo> GetReportControls(string filePath, string reportName, bool includeChildren = false)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? report = null;
+
+        try
+        {
+            // Open report in design view
+            app!.DoCmd.OpenReport(reportName, AcView.acViewDesign);
+
+            // Get report object
+            try
+            {
+                report = app.Reports[reportName];
+            }
+            catch
+            {
+                throw new ReportNotFoundException(reportName, filePath);
+            }
+
+            // Enumerate controls
+            var controls = EnumerateReportControls(report, includeChildren);
+
+            _logger.LogInformation("Retrieved {Count} controls from report {Report}",
+                (object)controls.Count, (object)reportName);
+
+            return controls;
+        }
+        catch (ReportNotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting controls from report {Report} in {Path}",
+                reportName, filePath);
+            throw new VbaOperationException($"Failed to get report controls: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close report without saving
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acReport, reportName, AcCloseSave.acSaveNo);
+            }
+            catch { }
+
+            ReleaseComObject(report);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Get properties of a specific control in a report
+    /// </summary>
+    public ControlPropertyInfo GetReportControlProperties(string filePath, string reportName,
+        string controlName, string[]? properties = null)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? report = null;
+        dynamic? control = null;
+        dynamic? props = null;
+
+        try
+        {
+            // Open report in design view
+            app!.DoCmd.OpenReport(reportName, AcView.acViewDesign);
+
+            // Get report object
+            try
+            {
+                report = app.Reports[reportName];
+            }
+            catch
+            {
+                throw new ReportNotFoundException(reportName, filePath);
+            }
+
+            // Get control
+            try
+            {
+                control = report.Controls[controlName];
+            }
+            catch
+            {
+                throw new ControlNotFoundException(controlName, reportName, filePath);
+            }
+
+            // Get control type
+            int controlTypeId = (int)control.ControlType;
+            string controlType = MapControlType(controlTypeId);
+
+            // Get properties
+            Dictionary<string, object?> propertyDict;
+            if (properties == null || properties.Length == 0)
+            {
+                propertyDict = GetAllProperties(control);
+            }
+            else
+            {
+                propertyDict = GetSpecificProperties(control, properties);
+            }
+
+            var result = new ControlPropertyInfo
+            {
+                File = filePath,
+                ObjectName = reportName,
+                ControlName = controlName,
+                ControlType = controlType,
+                Properties = propertyDict
+            };
+
+            _logger.LogInformation("Retrieved {Count} properties from control {Control} in report {Report}",
+                (object)propertyDict.Count, (object)controlName, (object)reportName);
+
+            return result;
+        }
+        catch (ReportNotFoundException)
+        {
+            throw;
+        }
+        catch (ControlNotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting properties for control {Control} in report {Report} in {Path}",
+                controlName, reportName, filePath);
+            throw new VbaOperationException($"Failed to get control properties: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close report without saving
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acReport, reportName, AcCloseSave.acSaveNo);
+            }
+            catch { }
+
+            ReleaseComObject(props);
+            ReleaseComObject(control);
+            ReleaseComObject(report);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Set a property value on a report control
+    /// </summary>
+    public SetPropertyResult SetReportControlProperty(string filePath, string reportName,
+        string controlName, string propertyName, object propertyValue)
+    {
+        var app = GetDatabase(filePath);
+        dynamic? report = null;
+        dynamic? control = null;
+        dynamic? property = null;
+
+        try
+        {
+            // Open report in design view
+            app!.DoCmd.OpenReport(reportName, AcView.acViewDesign);
+
+            // Get report object
+            try
+            {
+                report = app.Reports[reportName];
+            }
+            catch
+            {
+                throw new ReportNotFoundException(reportName, filePath);
+            }
+
+            // Get control
+            try
+            {
+                control = report.Controls[controlName];
+            }
+            catch
+            {
+                throw new ControlNotFoundException(controlName, reportName, filePath);
+            }
+
+            // Get property
+            try
+            {
+                property = control.Properties[propertyName];
+            }
+            catch
+            {
+                throw new PropertyNotFoundException(propertyName, controlName, filePath);
+            }
+
+            // Get previous value
+            object? previousValue = null;
+            try
+            {
+                previousValue = property.Value;
+            }
+            catch { }
+
+            // Set new value
+            try
+            {
+                var convertedValue = ConvertJsonValueToComVariant(propertyValue);
+                property.Value = convertedValue;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                if (ex.Message.Contains("read-only") || ex.Message.Contains("read only"))
+                {
+                    throw new PropertyReadOnlyException(propertyName, controlName, filePath);
+                }
+                throw new InvalidPropertyValueException(propertyName, propertyValue, filePath);
+            }
+
+            // Save report
+            app.DoCmd.Save(AcObjectType.acReport, reportName);
+
+            var result = new SetPropertyResult
+            {
+                Success = true,
+                File = filePath,
+                ObjectName = reportName,
+                ControlName = controlName,
+                PropertyName = propertyName,
+                PreviousValue = ConvertPropertyValue(previousValue),
+                NewValue = ConvertPropertyValue(propertyValue)
+            };
+
+            _logger.LogInformation("Set property {Property} = {Value} on control {Control} in report {Report}",
+                (object)propertyName, (object)propertyValue, (object)controlName, (object)reportName);
+
+            return result;
+        }
+        catch (ReportNotFoundException)
+        {
+            throw;
+        }
+        catch (ControlNotFoundException)
+        {
+            throw;
+        }
+        catch (PropertyNotFoundException)
+        {
+            throw;
+        }
+        catch (PropertyReadOnlyException)
+        {
+            throw;
+        }
+        catch (InvalidPropertyValueException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting property {Property} on control {Control} in report {Report} in {Path}",
+                propertyName, controlName, reportName, filePath);
+            throw new VbaOperationException($"Failed to set control property: {ex.Message}", ex);
+        }
+        finally
+        {
+            // Close report
+            try
+            {
+                app?.DoCmd.Close(AcObjectType.acReport, reportName, AcCloseSave.acSaveYes);
+            }
+            catch { }
+
+            ReleaseComObject(property);
+            ReleaseComObject(control);
+            ReleaseComObject(report);
+            ReleaseComObject(app);
+        }
+    }
+
+    /// <summary>
+    /// Enumerate all controls in a form
+    /// </summary>
+    private List<FormControlInfo> EnumerateFormControls(dynamic form, bool includeChildren, string? parentName = null)
+    {
+        var result = new List<FormControlInfo>();
+        dynamic? controls = null;
+        dynamic? control = null;
+
+        try
+        {
+            controls = form.Controls;
+
+            foreach (dynamic ctrl in controls)
+            {
+                control = ctrl;
+                try
+                {
+                    int controlTypeId = (int)control.ControlType;
+                    int sectionId = (int)control.Section;
+
+                    var info = new FormControlInfo
+                    {
+                        Name = (string)control.Name,
+                        ControlTypeId = controlTypeId,
+                        ControlType = MapControlType(controlTypeId),
+                        SectionId = sectionId,
+                        Section = MapFormSection(sectionId),
+                        Left = (int)control.Left,
+                        Top = (int)control.Top,
+                        Width = (int)control.Width,
+                        Height = (int)control.Height,
+                        Visible = (bool)control.Visible,
+                        Enabled = TryGetBoolProperty(control, "Enabled"),
+                        TabIndex = TryGetIntProperty(control, "TabIndex"),
+                        ControlSource = TryGetStringProperty(control, "ControlSource"),
+                        Parent = parentName,
+                        SourceObject = TryGetStringProperty(control, "SourceObject")
+                    };
+
+                    result.Add(info);
+
+                    // Process subforms recursively if requested
+                    if (includeChildren && controlTypeId == 112) // SubForm
+                    {
+                        try
+                        {
+                            dynamic subForm = control.Form;
+                            var subControls = EnumerateFormControls(subForm, true, info.Name);
+                            result.AddRange(subControls);
+                            ReleaseComObject(subForm);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to enumerate subform controls for {SubForm}",
+                                info.Name);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to read control info");
+                }
+                finally
+                {
+                    ReleaseComObject(control);
+                    control = null;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseComObject(controls);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Enumerate all controls in a report
+    /// </summary>
+    private List<ReportControlInfo> EnumerateReportControls(dynamic report, bool includeChildren, string? parentName = null)
+    {
+        var result = new List<ReportControlInfo>();
+        dynamic? controls = null;
+        dynamic? control = null;
+
+        try
+        {
+            controls = report.Controls;
+
+            foreach (dynamic ctrl in controls)
+            {
+                control = ctrl;
+                try
+                {
+                    int controlTypeId = (int)control.ControlType;
+                    int sectionId = (int)control.Section;
+
+                    var info = new ReportControlInfo
+                    {
+                        Name = (string)control.Name,
+                        ControlTypeId = controlTypeId,
+                        ControlType = MapControlType(controlTypeId),
+                        SectionId = sectionId,
+                        Section = MapReportSection(sectionId),
+                        Left = (int)control.Left,
+                        Top = (int)control.Top,
+                        Width = (int)control.Width,
+                        Height = (int)control.Height,
+                        Visible = (bool)control.Visible,
+                        ControlSource = TryGetStringProperty(control, "ControlSource"),
+                        Parent = parentName
+                    };
+
+                    result.Add(info);
+
+                    // Process subreports recursively if requested
+                    if (includeChildren && controlTypeId == 112) // SubReport
+                    {
+                        try
+                        {
+                            dynamic subReport = control.Report;
+                            var subControls = EnumerateReportControls(subReport, true, info.Name);
+                            result.AddRange(subControls);
+                            ReleaseComObject(subReport);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to enumerate subreport controls for {SubReport}",
+                                info.Name);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to read control info");
+                }
+                finally
+                {
+                    ReleaseComObject(control);
+                    control = null;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseComObject(controls);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get all properties from a control
+    /// </summary>
+    private Dictionary<string, object?> GetAllProperties(dynamic control)
+    {
+        var result = new Dictionary<string, object?>();
+        dynamic? properties = null;
+        dynamic? property = null;
+
+        try
+        {
+            properties = control.Properties;
+
+            foreach (dynamic prop in properties)
+            {
+                property = prop;
+                try
+                {
+                    string propName = (string)property.Name;
+                    object? propValue = property.Value;
+                    result[propName] = ConvertPropertyValue(propValue);
+                }
+                catch
+                {
+                    // Skip properties that can't be read
+                }
+                finally
+                {
+                    ReleaseComObject(property);
+                    property = null;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseComObject(properties);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get specific properties from a control
+    /// </summary>
+    private Dictionary<string, object?> GetSpecificProperties(dynamic control, string[] propertyNames)
+    {
+        var result = new Dictionary<string, object?>();
+        dynamic? properties = null;
+        dynamic? property = null;
+
+        try
+        {
+            properties = control.Properties;
+
+            foreach (var propName in propertyNames)
+            {
+                try
+                {
+                    property = properties[propName];
+                    object? propValue = property.Value;
+                    result[propName] = ConvertPropertyValue(propValue);
+                }
+                catch
+                {
+                    throw new PropertyNotFoundException(propName, (string)control.Name);
+                }
+                finally
+                {
+                    ReleaseComObject(property);
+                    property = null;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseComObject(properties);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Map control type ID to friendly name
+    /// </summary>
+    private string MapControlType(int controlTypeId)
+    {
+        return controlTypeId switch
+        {
+            100 => "Label",
+            101 => "Rectangle",
+            102 => "Line",
+            103 => "Image",
+            104 => "CommandButton",
+            105 => "OptionButton",
+            106 => "CheckBox",
+            107 => "OptionGroup",
+            108 => "BoundObjectFrame",
+            109 => "TextBox",
+            110 => "ListBox",
+            111 => "ComboBox",
+            112 => "SubForm",
+            114 => "ObjectFrame",
+            118 => "PageBreak",
+            119 => "CustomControl",
+            122 => "ToggleButton",
+            123 => "TabControl",
+            124 => "Page",
+            126 => "Attachment",
+            127 => "NavigationControl",
+            128 => "NavigationButton",
+            129 => "WebBrowserControl",
+            _ => $"Unknown ({controlTypeId})"
+        };
+    }
+
+    /// <summary>
+    /// Map form section ID to name
+    /// </summary>
+    private string MapFormSection(int sectionId)
+    {
+        return sectionId switch
+        {
+            0 => "Detail",
+            1 => "Header",
+            2 => "Footer",
+            3 => "PageHeader",
+            4 => "PageFooter",
+            _ => $"Unknown ({sectionId})"
+        };
+    }
+
+    /// <summary>
+    /// Map report section ID to name
+    /// </summary>
+    private string MapReportSection(int sectionId)
+    {
+        return sectionId switch
+        {
+            0 => "Detail",
+            1 => "PageHeader",
+            2 => "PageFooter",
+            3 => "ReportHeader",
+            4 => "ReportFooter",
+            5 => "GroupHeader",
+            6 => "GroupFooter",
+            _ => $"Unknown ({sectionId})"
+        };
+    }
+
+    /// <summary>
+    /// Convert JSON value to COM-compatible type
+    /// Handles System.Text.Json.JsonElement conversion for COM Interop
+    /// </summary>
+    /// <param name="value">Value from JSON deserialization</param>
+    /// <returns>COM-compatible value</returns>
+    private static object? ConvertJsonValueToComVariant(object? value)
+    {
+        // Handle null
+        if (value == null)
+            return null;
+
+        // Handle JsonElement from System.Text.Json
+        if (value is JsonElement jsonElement)
+        {
+            return jsonElement.ValueKind switch
+            {
+                JsonValueKind.String => jsonElement.GetString(),
+                JsonValueKind.Number => ConvertJsonNumber(jsonElement),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => DBNull.Value,
+                JsonValueKind.Undefined => DBNull.Value,
+                _ => jsonElement.GetRawText() // Array, Object など
+            };
+        }
+
+        // Already a compatible type
+        return value;
+    }
+
+    /// <summary>
+    /// Convert JSON number to appropriate numeric type
+    /// Prioritizes integer types for whole numbers
+    /// </summary>
+    /// <param name="element">JsonElement containing a number</param>
+    /// <returns>int, long, or double</returns>
+    private static object ConvertJsonNumber(JsonElement element)
+    {
+        // Try int first (most common for Access properties)
+        if (element.TryGetInt32(out var intValue))
+            return intValue;
+
+        // Try long for larger integers
+        if (element.TryGetInt64(out var longValue))
+            return longValue;
+
+        // Fall back to double for floating-point
+        return element.GetDouble();
+    }
+
+    /// <summary>
+    /// Convert COM property value to JSON-compatible type
+    /// </summary>
+    private object? ConvertPropertyValue(object? value)
+    {
+        if (value == null || value is DBNull)
+            return null;
+
+        // DateTime → ISO 8601 string
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-ddTHH:mm:ss");
+
+        // Byte[] → Base64 string
+        if (value is byte[] bytes)
+            return Convert.ToBase64String(bytes);
+
+        // COM object → string representation
+        if (System.Runtime.InteropServices.Marshal.IsComObject(value))
+        {
+            try
+            {
+                return value.ToString();
+            }
+            catch
+            {
+                return "[COM Object]";
+            }
+        }
+
+        // Boolean, String, Integer, Long, Double → as is
+        return value;
+    }
+
+    /// <summary>
+    /// Try to get a boolean property value
+    /// </summary>
+    private bool? TryGetBoolProperty(dynamic control, string propertyName)
+    {
+        try
+        {
+            return (bool)control.Properties[propertyName].Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Try to get an integer property value
+    /// </summary>
+    private int? TryGetIntProperty(dynamic control, string propertyName)
+    {
+        try
+        {
+            return (int)control.Properties[propertyName].Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Try to get a string property value
+    /// </summary>
+    private string? TryGetStringProperty(dynamic control, string propertyName)
+    {
+        try
+        {
+            var value = control.Properties[propertyName].Value;
+            return value?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     #endregion

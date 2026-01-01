@@ -89,6 +89,16 @@ public class McpServerHostService : IDisposable
 
     public void Stop()
     {
+        // Call async version synchronously for backward compatibility
+        StopAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// サーバを非同期で停止
+    /// </summary>
+    /// <param name="cancellationToken">キャンセルトークン</param>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
         lock (_lock)
         {
             if (CurrentStatus == ServerStatus.Stopped || CurrentStatus == ServerStatus.Stopping)
@@ -98,39 +108,52 @@ public class McpServerHostService : IDisposable
 
             UpdateStatus(ServerStatus.Stopping, ProcessId, "Stopping MCP server...");
             StopMonitoring();
+        }
 
-            try
+        try
+        {
+            if (_serverProcess != null && !_serverProcess.HasExited)
             {
-                if (_serverProcess != null && !_serverProcess.HasExited)
-                {
-                    _serverProcess.StandardInput.Close();
+                _serverProcess.StandardInput.Close();
 
-                    if (!_serverProcess.WaitForExit(5000))
-                    {
-                        _serverProcess.Kill();
-                        _serverProcess.WaitForExit();
-                    }
+                // 非同期で終了を待機（最大5秒）
+                var processExitTask = Task.Run(() =>
+                {
+                    _serverProcess.WaitForExit(5000);
+                    return _serverProcess.HasExited;
+                }, cancellationToken);
+
+                bool exited = await processExitTask.ConfigureAwait(false);
+
+                if (!exited && !_serverProcess.HasExited)
+                {
+                    _serverProcess.Kill();
+                    await Task.Run(() => _serverProcess.WaitForExit(), cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
-            catch (Exception ex)
+        }
+        catch (OperationCanceledException)
+        {
+            // キャンセルされた場合は強制終了
+            if (_serverProcess != null && !_serverProcess.HasExited)
             {
-                ErrorReceived?.Invoke(this, $"Error stopping server: {ex.Message}");
+                _serverProcess.Kill();
             }
-            finally
-            {
-                _serverProcess?.Dispose();
-                _serverProcess = null;
-                UpdateStatus(ServerStatus.Stopped, null, "MCP server stopped");
-            }
+            throw;
+        }
+        catch (Exception ex)
+        {
+            ErrorReceived?.Invoke(this, $"Error stopping server: {ex.Message}");
+        }
+        finally
+        {
+            _serverProcess?.Dispose();
+            _serverProcess = null;
+            UpdateStatus(ServerStatus.Stopped, null, "MCP server stopped");
         }
     }
 
-    public void Restart(string exePath, string? workingDirectory = null, string? targetFilePath = null)
-    {
-        Stop();
-        Thread.Sleep(1000);
-        Start(exePath, workingDirectory, targetFilePath);
-    }
 
     private void StartMonitoring()
     {

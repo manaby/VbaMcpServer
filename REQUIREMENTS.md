@@ -175,7 +175,9 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | `delete_excel_vba_procedure` | プロシージャを削除 |
 | `export_excel_vba_module` | モジュールをファイルにエクスポート |
 
-#### Access VBA ツール
+#### Access VBA ツール（12ツール）
+
+**モジュール操作（7ツール）:**
 
 | ツール名 | 説明 |
 |----------|------|
@@ -185,12 +187,17 @@ MCP サーバーを介して Excel/Access の VBA プロジェクトに直接ア
 | `write_access_vba_module` | Access モジュールに VBA コードを書き込み |
 | `create_access_vba_module` | 新規 VBA モジュールを Access に作成 |
 | `delete_access_vba_module` | Access の VBA モジュールを削除 |
+| `export_access_vba_module` | Access モジュールをファイルにエクスポート |
+
+**プロシージャ操作（5ツール）:**
+
+| ツール名 | 説明 |
+|----------|------|
 | `list_access_vba_procedures` | Access モジュール内のプロシージャ一覧を取得 |
 | `read_access_vba_procedure` | Access の特定プロシージャを読み取り |
 | `write_access_vba_procedure` | Access のプロシージャを書き込み/置換（upsert動作） |
 | `add_access_vba_procedure` | 新規プロシージャを追加（既存時はエラー） |
 | `delete_access_vba_procedure` | プロシージャを削除 |
-| `export_access_vba_module` | Access モジュールをファイルにエクスポート |
 
 #### Access データツール
 
@@ -447,6 +454,99 @@ Excel/Access で以下の設定を有効にする必要があります：
 - [ ] 参照設定の管理
 - [ ] VBA プロジェクトのインポート
 
+### Phase 5: GUI State Machine実装 ✅ 完了 (commit eee76e8 - 2025-12-31)
+- [x] 11状態のState Machine実装（GuiState.cs）
+- [x] 状態遷移の厳格化（許可された遷移のみ実行）
+- [x] すべての操作の非同期化（Start/Stop/Restart）
+- [x] CancellationTokenによるキャンセル対応
+- [x] ファイル監視とState連携（Running_FileClosedByUser状態検出）
+- [x] サーバークラッシュ検出（Error_ServerCrashed状態）
+- [x] UI強化：プログレスバー（Starting/Stopping状態で表示）
+- [x] UI強化：警告バナー（ファイル閉じ検出時に表示）
+- [x] Thread.Sleep削除によるUIフリーズ解消
+- [x] COM参照リーク修正（ComObjectWrapper、ComServiceBase）
+
+#### GUI管理アプリケーション詳細仕様
+
+**アーキテクチャ:**
+- **フレームワーク**: WinForms (.NET 8.0)
+- **デザインパターン**: State Machine パターン（11状態）
+- **非同期処理**: 完全async/await対応
+- **キャンセル**: CancellationToken による操作キャンセル対応
+
+**UI構成（3グループボックス）:**
+
+1. **Target File グループボックス:**
+   - ファイルパステキストボックス（読み取り専用）
+   - Browse ボタン - Excel/Accessファイル選択（OpenFileDialog使用）
+   - Clear ボタン - 選択ファイルクリア
+   - ファイルステータスラベル - Officeアプリでの開閉状態表示
+   - 警告バナーパネル（オレンジ背景） - ファイル閉じ検出時に表示
+
+2. **Server Control グループボックス:**
+   - ステータスラベル - サーバー状態表示（色分け: 赤=停止、橙=処理中、緑=実行中）
+   - プロセスIDラベル - サーバープロセスID表示
+   - Start ボタン - MCPサーバー起動
+   - Stop ボタン - サーバー停止
+   - Restart ボタン - サーバー再起動
+   - Force Stop ボタン - 強制停止（タイムアウト時表示、将来実装）
+   - プログレスバー - Starting/Stopping状態時に表示（マーキー式）
+
+3. **Log Viewer グループボックス:**
+   - タブコントロール（2タブ）:
+     - **Server Log タブ** - MCPサーバー出力（黒背景、緑文字）
+     - **VBA Edit Log タブ** - VBA編集履歴
+   - Clear ボタン - 現在のタブのログクリア
+   - Save ボタン - ログをテキストファイルに保存（SaveFileDialog使用）
+
+**State Machine（11状態の遷移表）:**
+
+| 状態 | 説明 | 許可される遷移先 |
+|------|------|------------------|
+| `Idle_NoFile` | ファイル未選択 | `Idle_FileSelected` |
+| `Idle_FileSelected` | ファイル選択済み（サーバー停止中） | `Idle_NoFile`, `Starting_OpeningFile` |
+| `Starting_OpeningFile` | ファイルを開いている（3-13秒） | `Starting_WaitingForFile`, `Error_FileOpenFailed`, `Stopping_Cleanup` |
+| `Starting_WaitingForFile` | ファイルが開くのを待機中（最大10秒） | `Starting_LaunchingServer`, `Error_FileOpenFailed`, `Stopping_Cleanup` |
+| `Starting_LaunchingServer` | MCPサーバー起動中（1秒） | `Running_FileOpen`, `Stopping_ServerShutdown` |
+| `Running_FileOpen` | 実行中（ファイル開いている正常状態） | `Running_FileClosedByUser`, `Stopping_ServerShutdown`, `Error_ServerCrashed` |
+| `Running_FileClosedByUser` | 実行中（ユーザーがファイルを手動で閉じた） | `Running_FileOpen`, `Stopping_ServerShutdown`, `Error_ServerCrashed` |
+| `Stopping_ServerShutdown` | サーバープロセス停止中（0-5秒） | `Stopping_Cleanup` |
+| `Stopping_Cleanup` | クリーンアップ処理中（瞬時） | `Idle_FileSelected`, `Starting_OpeningFile` |
+| `Error_FileOpenFailed` | エラー: ファイルオープン失敗 | `Idle_NoFile`, `Idle_FileSelected`, `Starting_OpeningFile` |
+| `Error_ServerCrashed` | エラー: サーバープロセスクラッシュ | `Idle_NoFile`, `Idle_FileSelected`, `Starting_OpeningFile` |
+
+**状態遷移ルール:**
+- 定義された遷移のみ許可（InvalidOperationException発生）
+- スレッドセーフ（lockによる排他制御）
+- 状態変化イベント発火（UIスレッドで実行）
+
+**主要機能:**
+
+1. **非同期処理:**
+   - すべてのサーバー操作（Start/Stop/Restart）を非同期実行
+   - Task.Run() によるバックグラウンドスレッド実行
+   - Thread.Sleep() 削除によるUIフリーズ解消
+
+2. **ファイル監視:**
+   - FileOpenerService によるリアルタイム監視（5秒間隔）
+   - Officeアプリケーションでのファイル開閉状態検出
+   - プロセスID取得とステータス表示
+
+3. **ログ管理:**
+   - LogViewerService による2種類のログ監視
+   - リアルタイムログ追加とファイル保存機能
+   - タブ式UI（Server Log / VBA Edit Log）
+
+4. **COM参照リーク対策:**
+   - ComObjectWrapper による自動解放
+   - ComServiceBase 基底クラスによる統一的なCOM管理
+   - using パターンによるリソース解放保証
+
+**技術的実装:**
+- **ファイル**: `MainForm.cs` (803行)、`MainForm.Designer.cs`、`GuiState.cs` (188行)
+- **サービス**: `McpServerHostService.cs`、`LogViewerService.cs`、`FileOpenerService.cs`
+- **実装完了コミット**: eee76e8（Phase 2完了: COM参照リーク修正とコード品質向上）
+
 ---
 
 ## 10. ライセンス
@@ -461,6 +561,7 @@ Excel/Access で以下の設定を有効にする必要があります：
 
 | バージョン | 日付 | 変更内容 |
 |------------|------|----------|
+| 0.6.0 | 2025-12-31 | Phase 5完了: GUI State Machine実装（11状態、非同期化、UIフリーズ解消、COM参照リーク修正） |
 | 0.5.0 | 2025-12-29 | Phase 4完了: プロシージャ操作強化（upsert動作、add/delete対応）、XMLエスケープ防御、改行正規化 |
 | 0.4.0 | 2025-12-29 | 破壊的変更: Excelツール名に`excel`プレフィックス追加、Access VBA対応ドキュメント追加 |
 | 0.3.0 | 2025-12-28 | Phase 3完了: Access VBA対応実装（AccessComService, AccessVbaTools 10ツール） |

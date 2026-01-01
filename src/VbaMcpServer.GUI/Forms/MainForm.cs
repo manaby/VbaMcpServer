@@ -13,13 +13,23 @@ public partial class MainForm : Form
     private readonly LogViewerService _logViewer;
     private readonly IConfiguration _configuration;
     private readonly FileOpenerService _fileOpenerService;
+    private readonly GuiStateMachine _stateMachine;
     private string _mcpServerPath;
     private string? _selectedFilePath;
     private TargetFileInfo? _currentTargetFile;
+    private CancellationTokenSource? _operationCts;
 
     public MainForm()
     {
         InitializeComponent();
+
+        // Set window title with version
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        this.Text = $"VBA MCP Server Manager - v{version?.Major}.{version?.Minor}.{version?.Build}";
+
+        // State Machine initialization
+        _stateMachine = new GuiStateMachine();
+        _stateMachine.StateChanged += OnGuiStateChanged;
 
         _serverHost = new McpServerHostService();
         _logViewer = new LogViewerService();
@@ -60,6 +70,12 @@ public partial class MainForm : Form
 
         // Load existing logs
         LoadLogs();
+
+        // Initial state is already Idle_NoFile (default in GuiStateMachine)
+        // Manually trigger initial button state update
+        UpdateButtonStatesForState(GuiState.Idle_NoFile);
+        UpdateStatusForState(GuiState.Idle_NoFile);
+        AppendServerLog("State: Application started (Idle_NoFile)");
     }
 
     private string FindMcpServerExecutable()
@@ -143,7 +159,6 @@ public partial class MainForm : Form
                 return;
             }
 
-            // Check if file is selected
             if (string.IsNullOrEmpty(_selectedFilePath))
             {
                 MessageBox.Show("Please select a target file first.", "Error",
@@ -151,76 +166,168 @@ public partial class MainForm : Form
                 return;
             }
 
-            // Open the file (if not already open)
-            AppendServerLog($"Opening file: {_selectedFilePath}");
-            _currentTargetFile = await _fileOpenerService.OpenFileAsync(_selectedFilePath);
+            // 新しいCancellationTokenSourceを作成
+            _operationCts?.Dispose();
+            _operationCts = new CancellationTokenSource();
 
-            // Start file status monitoring
-            _fileOpenerService.StartMonitoring(_selectedFilePath, TimeSpan.FromSeconds(5));
-
-            // Start MCP server with target file
-            _serverHost.Start(_mcpServerPath, null, _selectedFilePath);
-            StartLogMonitoring();
-
-            AppendServerLog($"Server started with target file: {_selectedFilePath}");
-
-            // Update button states
-            UpdateButtonStates();
+            await StartServerAsync(_selectedFilePath, _operationCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendServerLog("Start operation cancelled by user");
+            _stateMachine.TransitionTo(GuiState.Idle_FileSelected, "Cancelled");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to start server:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Failed to start server:\n{ex.Message}", "Error",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _stateMachine.TransitionTo(GuiState.Error_FileOpenFailed, ex.Message);
+        }
+        finally
+        {
+            _operationCts?.Dispose();
+            _operationCts = null;
         }
     }
 
-    private void btnStop_Click(object sender, EventArgs e)
+    /// <summary>
+    /// サーバ起動の非同期処理（State Machine統合版）
+    /// </summary>
+    private async Task StartServerAsync(string filePath, CancellationToken cancellationToken)
+    {
+        // Step 1: ファイルを開く
+        _stateMachine.TransitionTo(GuiState.Starting_OpeningFile,
+            $"Opening {Path.GetFileName(filePath)}");
+
+        TargetFileInfo fileInfo;
+        try
+        {
+            fileInfo = await _fileOpenerService.OpenFileAsync(filePath);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (Exception ex)
+        {
+            _stateMachine.TransitionTo(GuiState.Error_FileOpenFailed, ex.Message);
+            throw;
+        }
+
+        // Step 2: ファイルが開くまで待機
+        _stateMachine.TransitionTo(GuiState.Starting_WaitingForFile,
+            "Waiting for file to open");
+
+        if (!fileInfo.IsOpen)
+        {
+            _stateMachine.TransitionTo(GuiState.Error_FileOpenFailed,
+                "File did not open within timeout");
+            throw new TimeoutException("File did not open within timeout");
+        }
+
+        _currentTargetFile = fileInfo;
+
+        // Step 3: ファイル監視を開始
+        _fileOpenerService.StartMonitoring(filePath, TimeSpan.FromSeconds(5));
+
+        // Step 4: MCPサーバ起動
+        _stateMachine.TransitionTo(GuiState.Starting_LaunchingServer,
+            "Launching MCP server");
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Task.Run()でサーバ起動をバックグラウンドスレッドで実行
+        await Task.Run(() =>
+        {
+            _serverHost.Start(_mcpServerPath, null, filePath);
+        }, cancellationToken).ConfigureAwait(false);
+
+        StartLogMonitoring();
+
+        // Step 5: 実行中状態に遷移
+        _stateMachine.TransitionTo(GuiState.Running_FileOpen,
+            $"Server started with PID {_serverHost.ProcessId}");
+    }
+
+    private async void btnStop_Click(object sender, EventArgs e)
+    {
+        // Cancel any ongoing operation
+        _operationCts?.Cancel();
+
+        await StopServerAsync();
+    }
+
+    /// <summary>
+    /// Stop the MCP server asynchronously with state transitions
+    /// </summary>
+    private async Task StopServerAsync()
     {
         try
         {
-            _serverHost.Stop();
+            // Phase 1: Server shutdown
+            _stateMachine.TransitionTo(GuiState.Stopping_ServerShutdown,
+                "Stopping MCP server...");
+
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await _serverHost.StopAsync(cts.Token);
+
             _logViewer.StopWatching();
+
+            // Phase 2: Cleanup
+            _stateMachine.TransitionTo(GuiState.Stopping_Cleanup,
+                "Cleaning up resources...");
 
             // Stop file monitoring
             _fileOpenerService.StopMonitoring();
 
-            // Update button states (re-enable Browse/Clear)
-            UpdateButtonStates();
+            // Brief delay to show cleanup state
+            await Task.Delay(100);
+
+            // Transition back to Idle_FileSelected
+            _stateMachine.TransitionTo(GuiState.Idle_FileSelected,
+                "Server stopped successfully");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to stop server:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            AppendServerLog($"[ERROR] Failed to stop server: {ex.Message}");
+            MessageBox.Show($"Failed to stop server:\n{ex.Message}",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+            // On error, force cleanup and return to Idle_FileSelected
+            _fileOpenerService.StopMonitoring();
+            _logViewer.StopWatching();
+            _stateMachine.TransitionTo(GuiState.Idle_FileSelected,
+                "Server stopped with errors");
         }
     }
 
-    private void btnRestart_Click(object sender, EventArgs e)
+    private async void btnRestart_Click(object sender, EventArgs e)
     {
+        if (string.IsNullOrEmpty(_selectedFilePath))
+        {
+            MessageBox.Show("No file selected for restart.",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         try
         {
-            // Pass target file path to MCP server if selected
-            var targetFile = _selectedFilePath;
-            _serverHost.Restart(_mcpServerPath, null, targetFile);
+            // Step 1: Stop the server
+            await StopServerAsync();
 
-            if (targetFile != null)
-            {
-                AppendServerLog($"Server restarted with target file: {targetFile}");
-            }
+            // Step 2: Start the server with the same file
+            _operationCts?.Dispose();
+            _operationCts = new CancellationTokenSource();
+            await StartServerAsync(_selectedFilePath, _operationCts.Token);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to restart server:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            AppendServerLog($"[ERROR] Failed to restart server: {ex.Message}");
+            MessageBox.Show($"Failed to restart server:\n{ex.Message}",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void btnClearLogs_Click(object sender, EventArgs e)
     {
-        if (tabLogs.SelectedIndex == 0)
-        {
-            txtServerLog.Clear();
-        }
-        else
-        {
-            txtVbaLog.Clear();
-        }
+        txtServerLog.Clear();
     }
 
     private void btnSaveLogs_Click(object sender, EventArgs e)
@@ -236,9 +343,7 @@ public partial class MainForm : Form
         {
             try
             {
-                var logs = tabLogs.SelectedIndex == 0
-                    ? txtServerLog.Lines.ToList()
-                    : txtVbaLog.Lines.ToList();
+                var logs = txtServerLog.Lines.ToList();
 
                 _logViewer.SaveLogsToFile(dialog.FileName, logs);
                 MessageBox.Show($"Logs saved to:\n{dialog.FileName}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -263,6 +368,21 @@ public partial class MainForm : Form
         if (!string.IsNullOrEmpty(e.Message))
         {
             AppendServerLog(e.Message);
+        }
+
+        // State Machine integration: Detect server crash
+        var currentState = _stateMachine.CurrentState;
+        if (e.Status == ServerStatus.Stopped &&
+            (currentState == GuiState.Running_FileOpen ||
+             currentState == GuiState.Running_FileClosedByUser))
+        {
+            // Server crashed unexpectedly
+            _stateMachine.TransitionTo(GuiState.Error_ServerCrashed,
+                "Server process crashed unexpectedly.");
+
+            // Stop file monitoring on crash
+            _fileOpenerService.StopMonitoring();
+            _logViewer.StopWatching();
         }
     }
 
@@ -350,9 +470,6 @@ public partial class MainForm : Form
         {
             var serverLogs = _logViewer.LoadServerLogs();
             txtServerLog.Lines = serverLogs.ToArray();
-
-            var vbaLogs = _logViewer.LoadVbaEditLogs();
-            txtVbaLog.Lines = vbaLogs.ToArray();
         }
         catch (Exception ex)
         {
@@ -399,10 +516,17 @@ public partial class MainForm : Form
             lblFileStatus.Text = "Status: File selected (not opened)";
             lblFileStatus.ForeColor = Color.Blue;
 
-            AppendServerLog($"Target file set: {filePath}");
-
-            // Update button states (enable Start button)
-            UpdateButtonStates();
+            // State transition - only transition if not already in Idle_FileSelected
+            if (_stateMachine.CurrentState != GuiState.Idle_FileSelected)
+            {
+                _stateMachine.TransitionTo(GuiState.Idle_FileSelected,
+                    $"File selected: {Path.GetFileName(filePath)}");
+            }
+            else
+            {
+                // Already in the correct state, just log the change
+                AppendServerLog($"File changed: {Path.GetFileName(filePath)}");
+            }
         }
     }
 
@@ -414,10 +538,9 @@ public partial class MainForm : Form
         txtFilePath.Text = "(Select a file)";
         lblFileStatus.Text = "Status: Not selected";
         lblFileStatus.ForeColor = Color.Gray;
-        AppendServerLog("Target file cleared");
 
-        // Update button states (disable Start button)
-        UpdateButtonStates();
+        // State transition
+        _stateMachine.TransitionTo(GuiState.Idle_NoFile, "File cleared");
     }
 
     private void OnFileStatusChanged(object? sender, TargetFileInfo info)
@@ -429,6 +552,22 @@ public partial class MainForm : Form
         }
 
         UpdateFileStatusLabel(info);
+
+        // State Machine integration
+        var currentState = _stateMachine.CurrentState;
+
+        // If server is running and file was closed by user
+        if (currentState == GuiState.Running_FileOpen && !info.IsOpen)
+        {
+            _stateMachine.TransitionTo(GuiState.Running_FileClosedByUser,
+                "Warning: File was closed. Please keep the file open while server is running.");
+        }
+        // If server is running with file closed warning and file was reopened
+        else if (currentState == GuiState.Running_FileClosedByUser && info.IsOpen)
+        {
+            _stateMachine.TransitionTo(GuiState.Running_FileOpen,
+                "File reopened successfully.");
+        }
     }
 
     private void UpdateFileStatusLabel(TargetFileInfo info)
@@ -480,4 +619,176 @@ public partial class MainForm : Form
 
         base.OnFormClosing(e);
     }
+
+    #region State Machine Event Handlers
+
+    /// <summary>
+    /// GUI状態変化時のイベントハンドラ（UIスレッドで呼ばれる前提）
+    /// </summary>
+    private void OnGuiStateChanged(object? sender, StateChangedEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            Invoke(new Action(() => OnGuiStateChanged(sender, e)));
+            return;
+        }
+
+        // ログ記録
+        AppendServerLog($"State: {e.PreviousState} → {e.NewState}" +
+            (e.Message != null ? $" ({e.Message})" : ""));
+
+        // ボタン状態を更新
+        UpdateButtonStatesForState(e.NewState);
+
+        // ステータス表示を更新
+        UpdateStatusForState(e.NewState);
+    }
+
+    /// <summary>
+    /// 状態に基づいてボタンの有効/無効を設定
+    /// </summary>
+    private void UpdateButtonStatesForState(GuiState state)
+    {
+        switch (state)
+        {
+            case GuiState.Idle_NoFile:
+                btnBrowseFile.Enabled = true;
+                btnClearFile.Enabled = false;
+                btnStart.Enabled = false;
+                btnStop.Enabled = false;
+                btnRestart.Enabled = false;
+                btnForceStop.Visible = false;
+                progressBar.Visible = false;
+                pnlWarningBanner.Visible = false;
+                break;
+
+            case GuiState.Idle_FileSelected:
+                btnBrowseFile.Enabled = true;
+                btnClearFile.Enabled = true;
+                btnStart.Enabled = true;
+                btnStop.Enabled = false;
+                btnRestart.Enabled = false;
+                btnForceStop.Visible = false;
+                progressBar.Visible = false;
+                pnlWarningBanner.Visible = false;
+                break;
+
+            case GuiState.Starting_OpeningFile:
+            case GuiState.Starting_WaitingForFile:
+            case GuiState.Starting_LaunchingServer:
+                btnBrowseFile.Enabled = false;
+                btnClearFile.Enabled = false;
+                btnStart.Enabled = false;
+                btnStop.Enabled = true;  // Cancel可能
+                btnRestart.Enabled = false;
+                btnForceStop.Visible = false;
+                progressBar.Visible = true;  // プログレスバー表示
+                pnlWarningBanner.Visible = false;
+                break;
+
+            case GuiState.Running_FileOpen:
+                btnBrowseFile.Enabled = false;
+                btnClearFile.Enabled = false;
+                btnStart.Enabled = false;
+                btnStop.Enabled = true;
+                btnRestart.Enabled = true;
+                btnForceStop.Visible = false;
+                progressBar.Visible = false;
+                pnlWarningBanner.Visible = false;  // 警告非表示
+                break;
+
+            case GuiState.Running_FileClosedByUser:
+                btnBrowseFile.Enabled = false;
+                btnClearFile.Enabled = false;
+                btnStart.Enabled = false;
+                btnStop.Enabled = true;
+                btnRestart.Enabled = true;
+                btnForceStop.Visible = false;
+                progressBar.Visible = false;
+                pnlWarningBanner.Visible = true;  // 警告バナー表示
+                break;
+
+            case GuiState.Stopping_ServerShutdown:
+            case GuiState.Stopping_Cleanup:
+                btnBrowseFile.Enabled = false;
+                btnClearFile.Enabled = false;
+                btnStart.Enabled = false;
+                btnStop.Enabled = false;
+                btnRestart.Enabled = false;
+                btnForceStop.Visible = false;
+                progressBar.Visible = true;  // プログレスバー表示
+                pnlWarningBanner.Visible = false;
+                break;
+
+            case GuiState.Error_FileOpenFailed:
+            case GuiState.Error_ServerCrashed:
+                btnBrowseFile.Enabled = true;
+                btnClearFile.Enabled = true;
+                btnStart.Enabled = true;  // Retry可能
+                btnStop.Enabled = false;
+                btnRestart.Enabled = false;
+                btnForceStop.Visible = false;
+                progressBar.Visible = false;
+                pnlWarningBanner.Visible = false;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 状態に基づいてステータス表示を更新
+    /// </summary>
+    private void UpdateStatusForState(GuiState state)
+    {
+        switch (state)
+        {
+            case GuiState.Idle_NoFile:
+            case GuiState.Idle_FileSelected:
+                lblStatus.Text = "Status: Stopped";
+                lblStatus.ForeColor = Color.Gray;
+                break;
+
+            case GuiState.Starting_OpeningFile:
+                lblStatus.Text = "Status: Opening file...";
+                lblStatus.ForeColor = Color.Orange;
+                break;
+
+            case GuiState.Starting_WaitingForFile:
+                lblStatus.Text = "Status: Waiting for file...";
+                lblStatus.ForeColor = Color.Orange;
+                break;
+
+            case GuiState.Starting_LaunchingServer:
+                lblStatus.Text = "Status: Launching server...";
+                lblStatus.ForeColor = Color.Orange;
+                break;
+
+            case GuiState.Running_FileOpen:
+                lblStatus.Text = "Status: Running";
+                lblStatus.ForeColor = Color.Green;
+                break;
+
+            case GuiState.Running_FileClosedByUser:
+                lblStatus.Text = "Status: Running (⚠ File closed)";
+                lblStatus.ForeColor = Color.DarkOrange;
+                break;
+
+            case GuiState.Stopping_ServerShutdown:
+            case GuiState.Stopping_Cleanup:
+                lblStatus.Text = "Status: Stopping...";
+                lblStatus.ForeColor = Color.Orange;
+                break;
+
+            case GuiState.Error_FileOpenFailed:
+                lblStatus.Text = "Status: Error - File open failed";
+                lblStatus.ForeColor = Color.Red;
+                break;
+
+            case GuiState.Error_ServerCrashed:
+                lblStatus.Text = "Status: Error - Server crashed";
+                lblStatus.ForeColor = Color.Red;
+                break;
+        }
+    }
+
+    #endregion
 }

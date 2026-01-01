@@ -119,9 +119,30 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 #### Using GUI Manager
 
 1. Launch "VBA MCP Server Manager" from Start Menu
-2. **Click "Browse" button to select your target Excel/Access file**
-3. Click "Start" to run the MCP server
-4. Monitor logs in real-time
+
+2. **Target File Selection:**
+   - Click "Browse" button to select your Excel/Access file
+   - The file path will be displayed (file is not opened yet)
+   - File status shows "File selected (not opened)"
+
+3. **Start Server:**
+   - Click "Start" button
+   - The GUI will transition through starting states:
+     - **Opening file** in Office application (3-13 seconds)
+     - **Waiting for file** to open (max 10 seconds)
+     - **Launching MCP server** (1 second)
+   - Progress bar indicates the process
+
+4. **Monitor Operation:**
+   - Server status shows "Running" (green) when ready
+   - Process ID is displayed
+   - Monitor logs in real-time using the Log Viewer tabs (Server Log / VBA Edit Log)
+   - **Warning banner** appears if you accidentally close the file
+
+5. **Stop Server:**
+   - Click "Stop" or "Restart" button
+   - The server will gracefully shut down
+   - File monitoring stops automatically
 
 **Notes:**
 - The GUI automatically detects VbaMcpServer.exe using registry entry (set by installer) or same directory location
@@ -129,6 +150,68 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 - The selected target file will be automatically opened when the server starts
 
 For detailed configuration options, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+### GUI Manager Features
+
+The VBA MCP Server Manager provides a comprehensive interface for managing the MCP server:
+
+#### State Machine (11 States)
+
+The GUI implements a robust 11-state state machine for precise control:
+
+**Idle States:**
+- `Idle_NoFile` - No file selected
+- `Idle_FileSelected` - File selected but server stopped
+
+**Starting States:**
+- `Starting_OpeningFile` - Opening the target file (3-13 seconds)
+- `Starting_WaitingForFile` - Waiting for file to open (max 10 seconds)
+- `Starting_LaunchingServer` - Launching MCP server (1 second)
+
+**Running States:**
+- `Running_FileOpen` - Normal running state with file open
+- `Running_FileClosedByUser` - Warning state when user closes file manually
+
+**Stopping States:**
+- `Stopping_ServerShutdown` - Stopping server process (0-5 seconds)
+- `Stopping_Cleanup` - Cleanup process (instantaneous)
+
+**Error States:**
+- `Error_FileOpenFailed` - File failed to open
+- `Error_ServerCrashed` - Server process crashed unexpectedly
+
+#### UI Components
+
+**Target File Group:**
+- File path display (read-only)
+- Browse button - Select Excel/Access file
+- Clear button - Clear selected file
+- File status indicator - Shows if file is open in Office application
+- Warning banner - Displays when file is closed (orange background)
+
+**Server Control Group:**
+- Status label - Shows current server state with color coding (red=stopped, orange=processing, green=running)
+- Process ID display - Shows server process ID when running
+- Start button - Starts the MCP server
+- Stop button - Gracefully stops the server
+- Restart button - Restarts the server with the same file
+- Progress bar - Displays during Starting/Stopping states
+
+**Log Viewer Group:**
+- Tab control with two tabs:
+  - **Server Log** - MCP server output (real-time)
+  - **VBA Edit Log** - VBA code modification history
+- Clear button - Clears current tab's log
+- Save button - Exports logs to text file
+
+#### Advanced Features
+
+- **Fully Asynchronous Operations** - All server operations (Start/Stop/Restart) run asynchronously to prevent UI freezing
+- **Cancellation Support** - CancellationToken support for canceling long-running operations
+- **Real-time File Monitoring** - FileOpenerService monitors whether the target file is open in Office (5-second interval)
+- **Automatic File Opening** - Target file is automatically opened when server starts
+- **Crash Detection** - Detects and handles server crashes with appropriate error states
+- **COM Reference Leak Prevention** - ComObjectWrapper ensures proper COM resource cleanup
 
 #### Manual Configuration (CLI)
 
@@ -252,6 +335,8 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed instructions.
 | `list_excel_vba_procedures` | List procedures in an Excel module |
 | `read_excel_vba_procedure` | Read a specific procedure from Excel |
 | `write_excel_vba_procedure` | Write/replace a procedure in Excel |
+| `add_excel_vba_procedure` | Add a new procedure to an Excel module (error if exists) |
+| `delete_excel_vba_procedure` | Delete a procedure from an Excel module |
 | `export_excel_vba_module` | Export Excel module to file |
 
 ### Access VBA Tools
@@ -267,6 +352,8 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed instructions.
 | `list_access_vba_procedures` | List procedures in an Access module |
 | `read_access_vba_procedure` | Read a specific procedure from Access |
 | `write_access_vba_procedure` | Write/replace a procedure in Access |
+| `add_access_vba_procedure` | Add a new procedure to an Access module (error if exists) |
+| `delete_access_vba_procedure` | Delete a procedure from an Access module |
 | `export_access_vba_module` | Export Access module to file |
 
 ### Access Data Tools
@@ -305,6 +392,17 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed instructions.
 |------|-------------|
 | `export_access_table_to_csv` | Export table data to a CSV file |
 | `export_access_query_to_csv` | Export query results to a CSV file |
+
+#### Form and Report Control Operations
+
+| Tool | Description |
+|------|-------------|
+| `get_access_form_controls` | Get all controls in a form (supports subforms) |
+| `get_access_form_control_properties` | Get properties of a specific form control |
+| `set_access_form_control_property` | Set a property value on a form control |
+| `get_access_report_controls` | Get all controls in a report (supports subreports) |
+| `get_access_report_control_properties` | Get properties of a specific report control |
+| `set_access_report_control_property` | Set a property value on a report control |
 
 **Important Notes:**
 - Excel tools work with `.xlsm`, `.xlsb`, `.xls` files
@@ -432,9 +530,30 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 #### GUI マネージャーを使用
 
 1. スタートメニューから「VBA MCP Server Manager」を起動
-2. **「Browse」ボタンをクリックして対象の Excel/Access ファイルを選択**
-3. 「Start」ボタンをクリックして MCP サーバーを実行
-4. リアルタイムでログを監視
+
+2. **ターゲットファイルの選択:**
+   - 「Browse」ボタンをクリックして Excel/Access ファイルを選択
+   - ファイルパスが表示されます（ファイルはまだ開かれていません）
+   - ファイルステータスに「File selected (not opened)」と表示されます
+
+3. **サーバーの起動:**
+   - 「Start」ボタンをクリック
+   - GUI が起動状態を遷移します:
+     - **ファイルを開いています** - Office アプリケーションでファイルを開く（3-13秒）
+     - **ファイルの起動を待機中** - ファイルが開くまで待機（最大10秒）
+     - **MCP サーバー起動中** - サーバープロセスを起動（1秒）
+   - プログレスバーが処理状況を表示します
+
+4. **動作の監視:**
+   - サーバーステータスが「Running」（緑色）になれば準備完了
+   - プロセスIDが表示されます
+   - ログビューアのタブ（Server Log / VBA Edit Log）でリアルタイムにログを監視
+   - **警告バナー** がファイルを誤って閉じた場合に表示されます
+
+5. **サーバーの停止:**
+   - 「Stop」または「Restart」ボタンをクリック
+   - サーバーが正常にシャットダウンされます
+   - ファイル監視も自動的に停止します
 
 **注意事項:**
 - GUI は VbaMcpServer.exe をレジストリエントリ（インストーラーで設定）または同じディレクトリから自動検出します
@@ -442,6 +561,70 @@ dotnet publish src/VbaMcpServer.GUI -c Release -r win-x64 --self-contained /p:Pu
 - 選択したターゲットファイルはサーバー起動時に自動的に開かれます
 
 詳細な設定オプションは [docs/CONFIGURATION.md](docs/CONFIGURATION.md) を参照してください。
+
+### GUI マネージャーの機能
+
+VBA MCP Server Manager は、MCP サーバーを管理するための包括的なインターフェースを提供します：
+
+#### State Machine（11状態）
+
+GUI は正確な制御のための堅牢な11状態のState Machineを実装しています：
+
+**アイドル状態:**
+- `Idle_NoFile` - ファイル未選択
+- `Idle_FileSelected` - ファイル選択済みだがサーバー停止中
+
+**起動状態:**
+- `Starting_OpeningFile` - ターゲットファイルを開いている（3-13秒）
+- `Starting_WaitingForFile` - ファイルが開くのを待機中（最大10秒）
+- `Starting_LaunchingServer` - MCP サーバー起動中（1秒）
+
+**実行状態:**
+- `Running_FileOpen` - ファイルが開いている正常な実行状態
+- `Running_FileClosedByUser` - ユーザーが手動でファイルを閉じた時の警告状態
+
+**停止状態:**
+- `Stopping_ServerShutdown` - サーバープロセス停止中（0-5秒）
+- `Stopping_Cleanup` - クリーンアップ処理中（瞬時）
+
+**エラー状態:**
+- `Error_FileOpenFailed` - ファイルを開くのに失敗
+- `Error_ServerCrashed` - サーバープロセスが予期せずクラッシュ
+
+#### UI コンポーネント
+
+**Target File グループ:**
+- ファイルパス表示（読み取り専用）
+- Browse ボタン - Excel/Access ファイルを選択
+- Clear ボタン - 選択ファイルをクリア
+- ファイルステータス表示 - Office アプリケーションでファイルが開いているかを表示
+- 警告バナー - ファイルが閉じられた時に表示（オレンジ背景）
+
+**Server Control グループ:**
+- ステータスラベル - 現在のサーバー状態を色分けで表示（赤=停止、橙=処理中、緑=実行中）
+- プロセスID表示 - 実行中のサーバープロセスIDを表示
+- Start ボタン - MCP サーバーを起動
+- Stop ボタン - サーバーを正常に停止
+- Restart ボタン - 同じファイルでサーバーを再起動
+- プログレスバー - Starting/Stopping 状態時に表示
+
+**Log Viewer グループ:**
+- 2つのタブを持つタブコントロール:
+  - **Server Log** - MCP サーバーの出力（リアルタイム）
+  - **VBA Edit Log** - VBA コード変更履歴
+- Clear ボタン - 現在のタブのログをクリア
+- Save ボタン - ログをテキストファイルにエクスポート
+
+#### 高度な機能
+
+- **完全非同期処理** - すべてのサーバー操作（Start/Stop/Restart）が非同期で実行され、UIのフリーズを防止
+- **キャンセル対応** - CancellationToken により長時間実行される操作をキャンセル可能
+- **リアルタイムファイル監視** - FileOpenerService がターゲットファイルが Office で開いているかを監視（5秒間隔）
+- **自動ファイルオープン** - サーバー起動時にターゲットファイルを自動的に開く
+- **クラッシュ検出** - サーバークラッシュを検出し、適切なエラー状態で処理
+- **COM参照リーク防止** - ComObjectWrapper が適切な COM リソースのクリーンアップを保証
+
+
 
 #### 手動設定（CLI）
 
@@ -565,6 +748,8 @@ Claude Code(CLI ツール)の場合:
 | `list_excel_vba_procedures` | Excel モジュール内のプロシージャを一覧表示 |
 | `read_excel_vba_procedure` | Excel から特定のプロシージャを読み取り |
 | `write_excel_vba_procedure` | Excel でプロシージャを書き込み/置換 |
+| `add_excel_vba_procedure` | Excel モジュールに新しいプロシージャを追加（既存時はエラー） |
+| `delete_excel_vba_procedure` | Excel モジュールからプロシージャを削除 |
 | `export_excel_vba_module` | Excel モジュールをファイルにエクスポート |
 
 ### Access VBA ツール
@@ -580,6 +765,8 @@ Claude Code(CLI ツール)の場合:
 | `list_access_vba_procedures` | Access モジュール内のプロシージャを一覧表示 |
 | `read_access_vba_procedure` | Access から特定のプロシージャを読み取り |
 | `write_access_vba_procedure` | Access でプロシージャを書き込み/置換 |
+| `add_access_vba_procedure` | Access モジュールに新しいプロシージャを追加（既存時はエラー） |
+| `delete_access_vba_procedure` | Access モジュールからプロシージャを削除 |
 | `export_access_vba_module` | Access モジュールをファイルにエクスポート |
 
 ### Access データツール

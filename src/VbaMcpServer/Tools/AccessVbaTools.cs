@@ -1136,4 +1136,264 @@ public class AccessVbaTools
     }
 
     #endregion
+
+    #region Form and Report Control Tools
+
+    [McpServerTool(Name = "get_access_form_controls")]
+    [Description("Get all controls in an Access form")]
+    public string GetAccessFormControls(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the form")]
+        string formName,
+        [Description("Include controls in subforms (default: false)")]
+        bool includeChildren = false)
+    {
+        try
+        {
+            var controls = _accessService.GetFormControls(filePath, formName, includeChildren);
+
+            var result = new
+            {
+                file = filePath,
+                formName = formName,
+                controlCount = controls.Count,
+                controls = controls
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FormNotFoundException)
+        {
+            return $"Error: Form '{formName}' not found in {filePath}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_form_control_properties")]
+    [Description("Get detailed properties of a specific form control")]
+    public string GetAccessFormControlProperties(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the form")]
+        string formName,
+        [Description("Name of the control")]
+        string controlName,
+        [Description("Array of property names to get (null = all properties)")]
+        string[]? properties = null)
+    {
+        try
+        {
+            var result = _accessService.GetFormControlProperties(filePath, formName, controlName, properties);
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FormNotFoundException)
+        {
+            return $"Error: Form '{formName}' not found in {filePath}";
+        }
+        catch (ControlNotFoundException)
+        {
+            return $"Error: Control '{controlName}' not found in form '{formName}'";
+        }
+        catch (PropertyNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "set_access_form_control_property")]
+    [Description("Set a property value on a form control")]
+    public string SetAccessFormControlProperty(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the form")]
+        string formName,
+        [Description("Name of the control")]
+        string controlName,
+        [Description("Name of the property to set")]
+        string propertyName,
+        [Description("Value to set")]
+        object propertyValue)
+    {
+        try
+        {
+            var result = _accessService.SetFormControlProperty(filePath, formName, controlName, propertyName, propertyValue);
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (FormNotFoundException)
+        {
+            return $"Error: Form '{formName}' not found in {filePath}";
+        }
+        catch (ControlNotFoundException)
+        {
+            return $"Error: Control '{controlName}' not found in form '{formName}'";
+        }
+        catch (PropertyNotFoundException)
+        {
+            return $"Error: Property '{propertyName}' not found on control '{controlName}'";
+        }
+        catch (PropertyReadOnlyException)
+        {
+            return $"Error: Property '{propertyName}' is read-only on control '{controlName}'";
+        }
+        catch (InvalidPropertyValueException ex)
+        {
+            return $"Error: Invalid value for property '{propertyName}': {ex.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_report_controls")]
+    [Description("Get all controls in an Access report")]
+    public string GetAccessReportControls(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the report")]
+        string reportName,
+        [Description("Include controls in subreports (default: false)")]
+        bool includeChildren = false)
+    {
+        try
+        {
+            var controls = _accessService.GetReportControls(filePath, reportName, includeChildren);
+
+            var result = new
+            {
+                file = filePath,
+                reportName = reportName,
+                controlCount = controls.Count,
+                controls = controls
+            };
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (ReportNotFoundException)
+        {
+            return $"Error: Report '{reportName}' not found in {filePath}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "get_access_report_control_properties")]
+    [Description("Get detailed properties of a specific report control")]
+    public string GetAccessReportControlProperties(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the report")]
+        string reportName,
+        [Description("Name of the control")]
+        string controlName,
+        [Description("Array of property names to get (null = all properties)")]
+        string[]? properties = null)
+    {
+        try
+        {
+            var result = _accessService.GetReportControlProperties(filePath, reportName, controlName, properties);
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (ReportNotFoundException)
+        {
+            return $"Error: Report '{reportName}' not found in {filePath}";
+        }
+        catch (ControlNotFoundException)
+        {
+            return $"Error: Control '{controlName}' not found in report '{reportName}'";
+        }
+        catch (PropertyNotFoundException ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "set_access_report_control_property")]
+    [Description("Set a property value on a report control")]
+    public string SetAccessReportControlProperty(
+        [Description("Full file path to the Access database")]
+        string filePath,
+        [Description("Name of the report")]
+        string reportName,
+        [Description("Name of the control")]
+        string controlName,
+        [Description("Name of the property to set")]
+        string propertyName,
+        [Description("Value to set")]
+        object propertyValue)
+    {
+        try
+        {
+            var result = _accessService.SetReportControlProperty(filePath, reportName, controlName, propertyName, propertyValue);
+
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (ReportNotFoundException)
+        {
+            return $"Error: Report '{reportName}' not found in {filePath}";
+        }
+        catch (ControlNotFoundException)
+        {
+            return $"Error: Control '{controlName}' not found in report '{reportName}'";
+        }
+        catch (PropertyNotFoundException)
+        {
+            return $"Error: Property '{propertyName}' not found on control '{controlName}'";
+        }
+        catch (PropertyReadOnlyException)
+        {
+            return $"Error: Property '{propertyName}' is read-only on control '{controlName}'";
+        }
+        catch (InvalidPropertyValueException ex)
+        {
+            return $"Error: Invalid value for property '{propertyName}': {ex.Message}";
+        }
+        catch (FileNotFoundException)
+        {
+            return $"Error: Database not found or not open: {filePath}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    #endregion
 }
