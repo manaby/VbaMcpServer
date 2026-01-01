@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="VBA MCP Server"
-           Version="0.1.0"
+           Version="0.6.0"
            Manufacturer="vba-mcp-server contributors"
            UpgradeCode="A5B4C3D2-E1F0-4A5B-9C8D-7E6F5A4B3C2D">
 
@@ -14,13 +14,25 @@
       <Directory Id="INSTALLFOLDER" Name="VBA MCP Server">
         <Component Id="VbaMcpServerExe" Guid="B6C5D4E3-F2A1-4B6C-8D9E-7F8A6B5C4D3E">
           <File Id="VbaMcpServerExe"
-                Source="../src/VbaMcpServer/bin/Release/net8.0-windows/win-x64/publish/VbaMcpServer.exe"
+                Source="../bin/Release/win-x64/publish/VbaMcpServer.exe"
                 KeyPath="yes" />
         </Component>
 
         <Component Id="VbaMcpServerGUI" Guid="C7D6E5F4-A3B2-4C7D-9E8F-7A8B6C5D4E3F">
           <File Id="VbaMcpServerGUIExe"
-                Source="../src/VbaMcpServer.GUI/bin/Release/net8.0-windows/win-x64/publish/VbaMcpServer.GUI.exe"
+                Source="../bin/Release/win-x64/publish/VbaMcpServer.GUI.exe"
+                KeyPath="yes" />
+        </Component>
+
+        <Component Id="ReadmeFile" Guid="F8A9B1C2-D3E4-4F5A-A6B7-C8D9E0F1A2B3">
+          <File Id="ReadmeFile"
+                Source="../README.md"
+                KeyPath="yes" />
+        </Component>
+
+        <Component Id="LicenseFile" Guid="A1B2C3D4-E5F6-4A7B-B8C9-D0E1F2A3B4C5">
+          <File Id="LicenseFile"
+                Source="../LICENSE"
                 KeyPath="yes" />
         </Component>
       </Directory>
@@ -32,6 +44,7 @@
         <Component Id="ApplicationShortcut" Guid="D8E7F6A5-B4C3-4D8E-8F9A-8B7C6D5E4F3A">
           <Shortcut Id="StartMenuShortcut"
                     Name="VBA MCP Server Manager"
+                    Description="VBA MCP Server GUI Manager"
                     Target="[INSTALLFOLDER]VbaMcpServer.GUI.exe"
                     WorkingDirectory="INSTALLFOLDER" />
           <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
@@ -46,19 +59,45 @@
         <!-- Registry entry for installation path -->
         <Component Id="RegistryEntries" Guid="E9F8A7B6-C5D4-4E9F-9A8B-9C7D6E5F4A3B">
           <RegistryKey Root="HKCU" Key="Software\VbaMcpServer">
-            <RegistryValue Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" />
+            <RegistryValue Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
             <RegistryValue Name="ServerExePath" Type="string" Value="[INSTALLFOLDER]VbaMcpServer.exe" />
           </RegistryKey>
         </Component>
       </Directory>
     </StandardDirectory>
 
+    <!-- Desktop Shortcut (always created) -->
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="B1C2D3E4-F5A6-4B7C-C8D9-E0F1A2B3C4D5">
+        <Shortcut Id="DesktopShortcut"
+                  Name="VBA MCP Server Manager"
+                  Description="VBA MCP Server GUI Manager"
+                  Target="[INSTALLFOLDER]VbaMcpServer.GUI.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU"
+                      Key="Software\VbaMcpServer"
+                      Name="DesktopShortcut"
+                      Type="integer"
+                      Value="1"
+                      KeyPath="yes"/>
+      </Component>
+    </StandardDirectory>
+
     <!-- Features -->
     <Feature Id="ProductFeature" Title="VBA MCP Server" Level="1">
       <ComponentRef Id="VbaMcpServerExe" />
       <ComponentRef Id="VbaMcpServerGUI" />
+      <ComponentRef Id="ReadmeFile" />
+      <ComponentRef Id="LicenseFile" />
       <ComponentRef Id="ApplicationShortcut" />
       <ComponentRef Id="RegistryEntries" />
+      <ComponentRef Id="DesktopShortcut" />
     </Feature>
+
+    <!-- Properties for finish dialog message -->
+    <Property Id="ARPCOMMENTS" Value="VBA MCP Server - MCP server for VBA code access in Excel and Access" />
+    <Property Id="ARPCONTACT" Value="https://github.com/YOUR_USERNAME/vba-mcp-server" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/YOUR_USERNAME/vba-mcp-server/blob/master/README.md" />
+
   </Package>
 </Wix>
