@@ -269,15 +269,34 @@ Configuration file location:
 
 ## ⚠️ Important: Backup and Version Control
 
-**This tool does NOT provide automatic backup functionality.** VBA code changes are irreversible operations. You are responsible for protecting your work:
+**USE AT YOUR OWN RISK**
+
+**This tool directly modifies VBA code in your Excel and Access files. Incorrect operations may result in the loss of valuable program assets.**
+
+### Critical Warnings
+
+- ⚠️ **Data Loss Risk**: This tool can permanently modify or delete VBA code, potentially causing data loss or file corruption
+- ⚠️ **No Automatic Backup**: This tool does NOT provide automatic backup functionality
+- ⚠️ **Irreversible Changes**: VBA code modifications cannot be undone by this tool
+- ⚠️ **No Warranty**: This software is provided "as is" under the MIT License, without warranty of any kind
+
+### Required Precautions
+
+**You MUST implement the following measures before using this tool:**
+
+1. ✅ **Create Backups**: Always create a copy of important files before editing VBA code
+2. ✅ **Use Version Control**: Manage your VBA code with Git or other version control systems
+3. ✅ **Test in Development**: Verify changes in a test environment before applying to production files
+4. ✅ **Immediate Verification**: Check the results immediately after modification
 
 ### Recommended Practices
 
-1. **Use Git for VBA Code**: Manage your VBA code with Git or other version control systems
-2. **Backup Files Before Editing**: Always create a copy of your Excel/Access file before making code changes
+1. **Use Git for VBA Code**: Export VBA modules to `.bas`/`.cls` files and track them with Git
+2. **Backup Files Before Each Session**: Create timestamped backups (e.g., `MyFile_20260102_backup.xlsm`)
 3. **Use Office AutoSave**: If using OneDrive/SharePoint, leverage the automatic version history feature
+4. **Document Changes**: Keep a log of what changes were made and when
 
-**VBA code modifications are permanent and cannot be undone by this tool. Always backup your files before making changes.**
+**By using this software, you acknowledge and accept these risks and agree to take full responsibility for any consequences. The authors and contributors shall not be liable for any damages arising from the use of this software.**
 
 ## Usage Examples
 
@@ -732,15 +751,34 @@ Claude Code(CLI ツール)の場合:
 
 ## ⚠️ 重要: バックアップとバージョン管理
 
-**本ツールは自動バックアップ機能を提供しません。** VBA コードの変更は不可逆的な操作です。作業内容の保護は利用者の責任で行ってください：
+**自己責任でご利用ください**
+
+**本ツールは Excel および Access ファイルの VBA コードを直接変更します。誤った操作により、貴重なプログラム資産が失われる可能性があります。**
+
+### 重要な警告
+
+- ⚠️ **データ損失のリスク**: 本ツールは VBA コードを永続的に変更・削除する可能性があり、データ損失やファイル破損を引き起こす恐れがあります
+- ⚠️ **自動バックアップなし**: 本ツールは自動バックアップ機能を提供しません
+- ⚠️ **不可逆的な変更**: VBA コードの変更は本ツールでは元に戻せません
+- ⚠️ **無保証**: 本ソフトウェアは MIT ライセンスの下で「現状のまま」提供され、いかなる種類の保証も行いません
+
+### 必須の事前対策
+
+**本ツールを使用する前に、以下の対策を必ず実施してください:**
+
+1. ✅ **バックアップの作成**: 重要なファイルの VBA コードを編集する前に、必ずファイルのコピーを作成してください
+2. ✅ **バージョン管理の使用**: Git などのバージョン管理システムで VBA コードを管理してください
+3. ✅ **開発環境でテスト**: 本番環境のファイルに適用する前に、テスト環境で変更を確認してください
+4. ✅ **即座の確認**: 変更後は直ちに結果を確認してください
 
 ### 推奨される対策
 
-1. **Git で VBA コードを管理**: Git などのバージョン管理システムで VBA コードを管理する
-2. **編集前にファイルをバックアップ**: コード変更前に必ず Excel/Access ファイルのコピーを作成する
+1. **Git で VBA コードを管理**: VBA モジュールを `.bas`/`.cls` ファイルにエクスポートし、Git で追跡する
+2. **セッションごとにバックアップ**: タイムスタンプ付きのバックアップを作成する（例: `MyFile_20260102_backup.xlsm`）
 3. **Office の自動保存を活用**: OneDrive/SharePoint を使用している場合は、自動バージョン履歴機能を活用する
+4. **変更履歴の記録**: いつ、どのような変更を行ったかのログを残す
 
-**VBA コードの変更は永続的であり、本ツールでは元に戻せません。変更前に必ずファイルのバックアップを取ってください。**
+**本ソフトウェアを使用することにより、これらのリスクを認識し、その結果について全責任を負うことに同意したものとみなされます。作者および貢献者は、本ソフトウェアの使用により生じたいかなる損害についても一切の責任を負いません。**
 
 ## 使用例
 
